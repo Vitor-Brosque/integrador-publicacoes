@@ -1,4 +1,4 @@
-from ai.schemas import ParsedVehicleData,GeneratedPostContent
+from ai.schemas import ParsedVehicleData,GeneratedPostContent,GeneratedPlatformContent
 
 def fake_parse_vehicle(raw_input: str) -> ParsedVehicleData:
     raw_lower = raw_input.lower()
@@ -53,3 +53,56 @@ def fake_generate_post_content(vehicle) -> GeneratedPostContent:
         cta="Chame no WhatsApp para mais informações.",
         hashtags="#carros #bauru #rodoviariaveiculos",
     )
+def fake_generate_platform_content(social_post) -> list[GeneratedPlatformContent]:
+    vehicle = social_post.vehicle
+    vehicle_name = f"{vehicle.brand} {vehicle.model}".strip()
+
+    return [
+        GeneratedPlatformContent(
+            platform="instagram",
+            caption=(
+                f"{social_post.base_caption}\n\n"
+                f"Disponível na Rodoviária Veículos.\n"
+                f"Chame no WhatsApp para mais informações."
+            ),
+            hashtags="#carros #bauru #rodoviariaveiculos",
+        ),
+        GeneratedPlatformContent(
+            platform="facebook",
+            caption=(
+                f"{social_post.base_caption}\n\n"
+                f"Veículo disponível para visita na loja.\n"
+                f"Entre em contato para saber mais."
+            ),
+            hashtags="#RodoviariaVeiculos #Bauru",
+        ),
+        GeneratedPlatformContent(
+            platform="tiktok",
+            caption=(
+                f"{vehicle_name} passando na sua tela.\n"
+                f"Quer saber mais? Chama a gente."
+            ),
+            hashtags="#carros #carrosembauru",
+        ),
+        GeneratedPlatformContent(
+            platform="youtube",
+            title=f"{vehicle_name} disponível em Bauru",
+                   description=(
+                f"{social_post.base_caption}\n\n"
+                f"Rodoviária Veículos\n"
+                f"Av. Nações Unidas 1-50, Bauru\n"
+                f"WhatsApp (14) 99711-2299"
+            ),
+            hashtags="#carros #bauru",
+        ),
+        GeneratedPlatformContent(
+            platform="google_business",
+            title=f"{vehicle_name} disponível",
+            description=(
+                f"{vehicle_name} disponível na Rodoviária Veículos.\n"
+                f"Consulte condições e agende sua visita.\n\n"
+                f"Av. Nações Unidas 1-50, Bauru\n"
+                f"WhatsApp (14) 99711-2299"
+            ),
+        ),
+    ]

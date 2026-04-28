@@ -26,3 +26,11 @@ class GeneratedPostContent:
     base_caption: str = ""
     cta: str = ""
     hashtags: str = ""
+
+@dataclass
+class GeneratedPlatformContent:
+    platform: str
+    title: str = ""
+    caption: str = ""
+    description: str = ""
+    hashtags: str = ""
