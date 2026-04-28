@@ -3,6 +3,8 @@ from django.utils import timezone
 
 from .models import Review
 
+from publications.services.publication_creator import create_publication_targets
+
 
 @admin.register(Review)
 class ReviewAdmin(admin.ModelAdmin):
@@ -27,6 +29,8 @@ class ReviewAdmin(admin.ModelAdmin):
             review.approved_by = request.user.username
             review.approved_at = timezone.now()
             review.save()
+            
+            create_publication_targets(review.social_post)
 
             updated_count += 1
 
