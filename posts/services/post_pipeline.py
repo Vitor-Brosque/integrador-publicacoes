@@ -1,10 +1,19 @@
 from vehicles.services.vehicle_normalizer import normalize_vehicle
 from posts.services.post_generator import generate_social_post
 from posts.services.platform_post_generator import generate_platform_posts
+from posts.models import SocialPost
 from reviews.models import Review
 
 
 def run_post_pipeline(vehicle):
+    existing_post = SocialPost.objects.filter(
+        vehicle=vehicle,
+        review__status="pending",
+    ).first()
+
+    if existing_post:
+        return existing_post
+
     vehicle = normalize_vehicle(vehicle)
 
     social_post = generate_social_post(vehicle)
