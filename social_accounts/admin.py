@@ -1,3 +1,24 @@
 from django.contrib import admin
 
-# Register your models here.
+from .models import SocialAccount
+
+
+@admin.register(SocialAccount)
+class SocialAccountAdmin(admin.ModelAdmin):
+    list_display = (
+        "id",
+        "platform",
+        "account_name",
+        "status",
+        "connected_at",
+        "token_expires_at",
+    )
+    search_fields = (
+        "account_name",
+        "external_account_id",
+    )
+    list_filter = (
+        "platform",
+        "status",
+        "created_at",
+    )
