@@ -1,18 +1,28 @@
-import uuid
-from datetime import datetime
+from publications.integrations.fake import FakePublisher
+
+
+def get_publisher(platform: str):
+    if platform == "instagram":
+        return FakePublisher()
+
+    if platform == "facebook":
+        return FakePublisher()
+
+    if platform == "tiktok":
+        return FakePublisher()
+
+    if platform == "youtube":
+        return FakePublisher()
+
+    if platform == "google_business":
+        return FakePublisher()
+
+    raise ValueError(f"Plataforma não suportada: {platform}")
 
 
 def publish_to_platform(publication_target):
-    """
-    Simula envio para rede social
-    """
+    platform = publication_target.platform_post.platform
 
-    fake_external_id = str(uuid.uuid4())
+    publisher = get_publisher(platform)
 
-    publication_target.external_post_id = fake_external_id
-    publication_target.external_url = f"https://fake.social/{fake_external_id}"
-    publication_target.status = "published"
-    publication_target.published_at = datetime.now()
-    publication_target.save()
-
-    return publication_target
+    return publisher.publish(publication_target)
