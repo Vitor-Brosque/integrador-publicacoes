@@ -1,5 +1,4 @@
-from ai.schemas import ParsedVehicleData
-
+from ai.schemas import ParsedVehicleData,GeneratedPostContent
 
 def fake_parse_vehicle(raw_input: str) -> ParsedVehicleData:
     raw_lower = raw_input.lower()
@@ -39,3 +38,18 @@ def fake_parse_vehicle(raw_input: str) -> ParsedVehicleData:
     data.enrichment_source = "fake_client"
 
     return data
+
+
+def fake_generate_post_content(vehicle) -> GeneratedPostContent:
+    vehicle_name = f"{vehicle.brand} {vehicle.model}".strip()
+
+    return GeneratedPostContent(
+        base_title=f"{vehicle_name} disponível",
+        base_caption=(
+            f"{vehicle_name} {vehicle.version or ''}\n"
+            f"Uma opção interessante para quem busca um carro para o dia a dia.\n"
+            f"Entre em contato para mais informações."
+        ),
+        cta="Chame no WhatsApp para mais informações.",
+        hashtags="#carros #bauru #rodoviariaveiculos",
+    )

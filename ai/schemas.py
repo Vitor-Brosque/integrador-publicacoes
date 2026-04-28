@@ -19,3 +19,10 @@ class ParsedVehicleData:
     target_audience: str = ""
     commercial_positioning: str = ""
     enrichment_source: str = ""
+
+@dataclass
+class GeneratedPostContent:
+    base_title: str = ""
+    base_caption: str = ""
+    cta: str = ""
+    hashtags: str = ""

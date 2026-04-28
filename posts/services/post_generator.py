@@ -1,19 +1,16 @@
+from ai.post_content_generator import generate_post_content
 from posts.models import SocialPost
 
 
 def generate_social_post(vehicle):
-    title = f"{vehicle.brand} {vehicle.model} disponível"
-
-    caption = (
-        f"{vehicle.brand} {vehicle.model} {vehicle.version or ''}\n"
-        f"Ótima opção para o dia a dia.\n"
-        f"Entre em contato para mais informações."
-    )
+    generated_content = generate_post_content(vehicle)
 
     post = SocialPost.objects.create(
         vehicle=vehicle,
-        base_title=title,
-        base_caption=caption,
+        base_title=generated_content.base_title,
+        base_caption=generated_content.base_caption,
+        cta=generated_content.cta,
+        hashtags=generated_content.hashtags,
         generated_by_ai=True,
         generation_status="basic",
     )
