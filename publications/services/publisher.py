@@ -3,6 +3,7 @@ from publications.integrations.google_business import GoogleBusinessPublisher
 from publications.integrations.instagram import InstagramPublisher
 from publications.integrations.tiktok import TikTokPublisher
 from publications.integrations.youtube import YouTubePublisher
+from publications.services.publication_validator import validate_publication_target
 
 
 def get_publisher(platform: str):
@@ -25,6 +26,8 @@ def get_publisher(platform: str):
 
 
 def publish_to_platform(publication_target):
+    validate_publication_target(publication_target)
+
     platform = publication_target.platform_post.platform
     publisher = get_publisher(platform)
 

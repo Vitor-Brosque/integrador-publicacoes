@@ -1,0 +1,17 @@
+def validate_publication_target(publication_target):
+    platform_post = publication_target.platform_post
+    social_post = platform_post.social_post
+
+    if publication_target.status != "pending":
+        raise ValueError("A publicação precisa estar pendente para ser enviada.")
+
+    if not hasattr(social_post, "review"):
+        raise ValueError("O post não possui revisão.")
+
+    if social_post.review.status != "approved":
+        raise ValueError("O post precisa estar aprovado antes da publicação.")
+
+    if not platform_post.generated_by_ai:
+        raise ValueError("O conteúdo da plataforma ainda não foi gerado.")
+
+    return True
