@@ -17,18 +17,26 @@ class PublicationTargetAdmin(admin.ModelAdmin):
     list_filter = ("status", "created_at")
     actions = ("publish_selected",)
     search_fields = ("external_post_id",)
+    readonly_fields = ("external_post_id", "external_url", "published_at", "error_message")
 
     @admin.action(description="Publicar nas redes")
     def publish_selected(self, request, queryset):
-        count = 0
+        published_count = 0
+        failed_count = 0
 
         for publication in queryset:
-            if publication.status == "pending":
+            try:
                 publish_to_platform(publication)
-                count += 1
+                published_count += 1
+            except Exception as error:
+                publication.status = "failed"
+                publication.error_message = str(error)
+                publication.save()
+                failed_count += 1
 
         self.message_user(
             request,
-            f"{count} publicação(ões) enviadas com sucesso.",
-            level=messages.SUCCESS,
+            f"{published_count} publicação(ões) enviada(s). "
+            f"{failed_count} falha(s).",
+            level=messages.SUCCESS if failed_count == 0 else messages.WARNING,
         )
