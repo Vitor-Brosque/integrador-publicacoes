@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from django.utils import timezone
 
 from publications.integrations.base import BasePublisher
 
@@ -11,7 +11,7 @@ class FakePublisher(BasePublisher):
         publication_target.external_post_id = fake_external_id
         publication_target.external_url = f"https://fake.social/{fake_external_id}"
         publication_target.status = "published"
-        publication_target.published_at = datetime.now()
+        publication_target.published_at = timezone.now()
         publication_target.save()
 
         return publication_target
