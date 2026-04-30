@@ -34,3 +34,27 @@ Hatch"""
         self.assertNotEqual(publication.external_post_id, "")
         self.assertNotEqual(publication.external_url, "")
         self.assertIsNotNone(publication.published_at)
+
+
+    def test_publish_to_platform_requires_approved_review(self):
+        vehicle = Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+    1.0 FLEX MANUAL
+    R$ 39.900
+    2018/2019
+    Branco
+    4 portas
+    Hatch"""
+        )
+
+        post = run_post_pipeline(vehicle)
+
+        publication_targets = create_publication_targets(post)
+        publication = publication_targets[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_platform(publication)
+
+        publication.refresh_from_db()
+
+        self.assertEqual(publication.status, "pending")
