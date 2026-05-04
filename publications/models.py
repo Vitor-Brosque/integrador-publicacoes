@@ -2,6 +2,7 @@ from django.db import models
 
 from posts.models import PlatformPost
 
+from social_accounts.models import SocialAccount
 
 class PublicationStatus(models.TextChoices):
     PENDING = "pending", "Pendente"
@@ -16,6 +17,14 @@ class PublicationTarget(models.Model):
         on_delete=models.CASCADE,
         related_name="publications",
     )
+
+    social_account = models.ForeignKey(
+    SocialAccount,
+    on_delete=models.SET_NULL,
+    blank=True,
+    null=True,
+    related_name="publication_targets",
+)
 
     external_post_id = models.CharField(max_length=255, blank=True)
     external_url = models.URLField(blank=True)

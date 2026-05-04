@@ -13,8 +13,9 @@ class PublicationTargetAdmin(admin.ModelAdmin):
         "external_url",
         "published_at",
         "created_at",
+        "social_account",
     )
-    list_filter = ("status", "created_at")
+    list_filter = ("status","social_account", "created_at")
     actions = ("publish_selected",)
     search_fields = ("external_post_id",)
     readonly_fields = ("external_post_id", "external_url", "published_at", "error_message")
