@@ -14,4 +14,10 @@ def validate_publication_target(publication_target):
     if not platform_post.generated_by_ai:
         raise ValueError("O conteúdo da plataforma ainda não foi gerado.")
 
+    if publication_target.social_account is None:
+        raise ValueError("A publicação precisa de uma conta social conectada.")   
+
+    if publication_target.social_account.status != "connected":
+        raise ValueError("A conta social precisa estar conectada.")    
+    
     return True

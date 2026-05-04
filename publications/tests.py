@@ -26,8 +26,18 @@ Hatch"""
         post.review.status = "approved"
         post.review.save()
 
+        SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+        )
+
         publication_targets = create_publication_targets(post)
-        publication = publication_targets[0]
+        publication = [
+            publication
+            for publication in publication_targets
+            if publication.platform_post.platform == "instagram"
+        ][0]
 
         publish_to_platform(publication)
 
@@ -126,3 +136,32 @@ Hatch"""
         ][0]
 
         self.assertEqual(instagram_publication.social_account, instagram_account)
+
+
+
+
+    def test_publish_to_platform_requires_connected_social_account(self):
+        vehicle = Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+    1.0 FLEX MANUAL
+    R$ 39.900
+    2018/2019
+    Branco
+    4 portas
+    Hatch"""
+        )
+
+        post = run_post_pipeline(vehicle)
+
+        post.review.status = "approved"
+        post.review.save()
+
+        publication_targets = create_publication_targets(post)
+        publication = publication_targets[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_platform(publication)
+
+        publication.refresh_from_db()
+
+        self.assertEqual(publication.status, "pending")
