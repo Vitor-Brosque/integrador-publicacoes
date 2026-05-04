@@ -4,6 +4,8 @@ from posts.models import SocialPost
 
 def generate_social_post(vehicle):
     generated_content = generate_post_content(vehicle)
+    
+    main_media = vehicle.media_assets.first()
 
     post = SocialPost.objects.create(
         vehicle=vehicle,
@@ -13,6 +15,7 @@ def generate_social_post(vehicle):
         hashtags=generated_content.hashtags,
         generated_by_ai=True,
         generation_status="basic",
+        main_media=main_media,
     )
 
     return post
