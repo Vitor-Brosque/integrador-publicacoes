@@ -5,6 +5,9 @@ from publications.services.publication_creator import create_publication_targets
 from publications.services.publisher import publish_to_platform
 from vehicles.models import Vehicle
 
+from social_accounts.models import SocialAccount
+
+
 
 class PublicationPublisherTest(TestCase):
     def test_publish_to_platform_marks_publication_as_published(self):
@@ -90,3 +93,36 @@ Hatch"""
         self.assertEqual(publication.status, "pending")
         self.assertEqual(publication.external_post_id, "")
         self.assertEqual(publication.external_url, "")
+
+
+    def test_create_publication_targets_assigns_connected_social_account(self):
+        vehicle = Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+    1.0 FLEX MANUAL
+    R$ 39.900
+    2018/2019
+    Branco
+    4 portas
+    Hatch"""
+        )
+
+        post = run_post_pipeline(vehicle)
+
+        instagram_account = SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+        )
+
+        post.review.status = "approved"
+        post.review.save()
+
+        publication_targets = create_publication_targets(post)
+
+        instagram_publication = [
+            publication
+            for publication in publication_targets
+            if publication.platform_post.platform == "instagram"
+        ][0]
+
+        self.assertEqual(instagram_publication.social_account, instagram_account)
