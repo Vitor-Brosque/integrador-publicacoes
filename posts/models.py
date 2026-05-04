@@ -2,6 +2,8 @@ from django.db import models
 
 from vehicles.models import Vehicle
 
+from media_library.models import MediaAsset
+
 
 class Platform(models.TextChoices):
     INSTAGRAM = "instagram", "Instagram"
@@ -30,6 +32,14 @@ class SocialPost(models.Model):
 
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+
+    main_media = models.ForeignKey(
+        MediaAsset,
+        on_delete=models.SET_NULL,
+        blank=True,
+        null=True,
+        related_name="social_posts",
+    )
 
     class Meta:
         ordering = ["-created_at"]
