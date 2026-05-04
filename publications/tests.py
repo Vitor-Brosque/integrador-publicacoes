@@ -58,3 +58,35 @@ Hatch"""
         publication.refresh_from_db()
 
         self.assertEqual(publication.status, "pending")
+
+       
+    def test_publish_to_platform_rejects_invalid_platform(self):
+        vehicle = Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+1.0 FLEX MANUAL
+R$ 39.900
+2018/2019
+Branco
+4 portas
+Hatch"""
+        )
+
+        post = run_post_pipeline(vehicle)
+
+        post.review.status = "approved"
+        post.review.save()
+
+        publication_targets = create_publication_targets(post)
+        publication = publication_targets[0]
+
+        publication.platform_post.platform = "invalid_platform"
+        publication.platform_post.save()
+
+        with self.assertRaises(ValueError):
+            publish_to_platform(publication)
+
+        publication.refresh_from_db()
+
+        self.assertEqual(publication.status, "pending")
+        self.assertEqual(publication.external_post_id, "")
+        self.assertEqual(publication.external_url, "")
