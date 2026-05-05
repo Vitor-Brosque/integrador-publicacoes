@@ -5,7 +5,7 @@ from posts.models import PostMedia, SocialPost
 def generate_social_post(vehicle):
     generated_content = generate_post_content(vehicle)
 
-    vehicle_media = list(vehicle.media_assets.all())
+    vehicle_media = list(vehicle.media_assets.order_by("id"))
     main_media = vehicle_media[0] if vehicle_media else None
 
     post = SocialPost.objects.create(
