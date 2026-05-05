@@ -248,3 +248,82 @@ class PublicationPublisherTest(TestCase):
 
         self.assertEqual(payload["parent"]["media_type"], "CAROUSEL")
         self.assertIn("caption", payload["parent"])
+
+
+    def test_publishers_generate_platform_specific_fake_urls(self):
+        vehicle = self.create_vehicle()
+
+        self.create_image_media(
+            vehicle=vehicle,
+            name="gol_frente.jpg",
+            content=b"fake image content",
+            public_url="https://example.com/gol_frente.jpg",
+        )
+
+        post = run_post_pipeline(vehicle)
+        self.approve_post(post)
+
+        SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+        )
+        SocialAccount.objects.create(
+            platform="facebook",
+            account_name="Facebook Rodoviária",
+            status="connected",
+        )
+        SocialAccount.objects.create(
+            platform="tiktok",
+            account_name="TikTok Rodoviária",
+            status="connected",
+        )
+        SocialAccount.objects.create(
+            platform="google_business",
+            account_name="Google Business Rodoviária",
+            status="connected",
+        )
+        SocialAccount.objects.create(
+            platform="youtube",
+            account_name="YouTube Rodoviária",
+            status="connected",
+        )
+
+        publication_targets = create_publication_targets(post)
+
+        for publication in publication_targets:
+            publish_to_platform(publication)
+            publication.refresh_from_db()
+
+            self.assertEqual(publication.status, "published")
+            self.assertNotEqual(publication.external_post_id, "")
+            self.assertNotEqual(publication.external_url, "")
+            self.assertIsNotNone(publication.published_at)
+            self.assertNotEqual(publication.error_message, "")
+
+        instagram_publication = self.get_publication_by_platform(
+            publication_targets,
+            "instagram",
+        )
+        facebook_publication = self.get_publication_by_platform(
+            publication_targets,
+            "facebook",
+        )
+        tiktok_publication = self.get_publication_by_platform(
+            publication_targets,
+            "tiktok",
+        )
+        google_publication = self.get_publication_by_platform(
+            publication_targets,
+            "google_business",
+        )
+        youtube_publication = self.get_publication_by_platform(
+            publication_targets,
+            "youtube",
+        )
+
+        self.assertTrue(instagram_publication.external_url.startswith("https://fake.instagram/"))
+        self.assertTrue(facebook_publication.external_url.startswith("https://fake.facebook/"))
+        self.assertTrue(tiktok_publication.external_url.startswith("https://fake.tiktok/"))
+        self.assertTrue(google_publication.external_url.startswith("https://fake.google-business/"))
+        self.assertTrue(youtube_publication.external_url.startswith("https://fake.youtube/"))
