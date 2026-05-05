@@ -49,6 +49,30 @@ class SocialPost(models.Model):
     def __str__(self):
         return f"Post #{self.id} - {self.vehicle}"
 
+class PostMedia(models.Model):
+    social_post = models.ForeignKey(
+        SocialPost,
+        on_delete=models.CASCADE,
+        related_name="post_media",
+    )
+    media_asset = models.ForeignKey(
+        MediaAsset,
+        on_delete=models.CASCADE,
+        related_name="post_media",
+    )
+    order = models.PositiveIntegerField(default=0)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["order", "id"]
+        unique_together = ["social_post", "media_asset"]
+        verbose_name = "Mídia do post"
+        verbose_name_plural = "Mídias do post"
+
+    def __str__(self):
+        return f"{self.social_post} - {self.media_asset} - ordem {self.order}"
+
 
 class PlatformPost(models.Model):
     social_post = models.ForeignKey(

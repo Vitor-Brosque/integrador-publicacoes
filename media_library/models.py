@@ -18,6 +18,7 @@ class MediaAsset(models.Model):
         max_length=20,
         choices=MediaType.choices,
     )
+    public_url = models.URLField(blank=True)
     file = models.FileField(upload_to="vehicle_media/")
     thumbnail = models.ImageField(
         upload_to="vehicle_thumbnails/",

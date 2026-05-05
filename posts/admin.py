@@ -1,10 +1,14 @@
 from django.contrib import admin
 
-from .models import PlatformPost, SocialPost
+from .models import PlatformPost, PostMedia, SocialPost
 
 
 class PlatformPostInline(admin.TabularInline):
     model = PlatformPost
+    extra = 0
+
+class PostMediaInline(admin.TabularInline):
+    model = PostMedia
     extra = 0
 
 
@@ -29,8 +33,7 @@ class SocialPostAdmin(admin.ModelAdmin):
         "generation_status",
         "created_at",
     )
-    inlines = [PlatformPostInline]
-
+    inlines = [PostMediaInline, PlatformPostInline]
 
 @admin.register(PlatformPost)
 class PlatformPostAdmin(admin.ModelAdmin):
