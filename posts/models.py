@@ -14,6 +14,11 @@ class Platform(models.TextChoices):
 
 
 class SocialPost(models.Model):
+    class PostType(models.TextChoices):
+        SINGLE_IMAGE = "single_image", "Foto única"
+        CAROUSEL = "carousel", "Carrossel"
+        VIDEO = "video", "Vídeo"
+
     vehicle = models.ForeignKey(
         Vehicle,
         on_delete=models.CASCADE,
@@ -21,6 +26,12 @@ class SocialPost(models.Model):
     )
 
     raw_context = models.TextField(blank=True)
+
+    post_type = models.CharField(
+        max_length=20,
+        choices=PostType.choices,
+        default=PostType.CAROUSEL,
+    )
 
     base_title = models.CharField(max_length=180, blank=True)
     base_caption = models.TextField(blank=True)
@@ -46,6 +57,8 @@ class SocialPost(models.Model):
         verbose_name = "Post base"
         verbose_name_plural = "Posts base"
 
+    def __str__(self):
+        return f"Post #{self.id} - {self.vehicle}"
     def __str__(self):
         return f"Post #{self.id} - {self.vehicle}"
 

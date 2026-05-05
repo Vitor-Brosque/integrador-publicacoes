@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Criar post de veículo existente</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-top: 16px;
+            margin-bottom: 8px;
+        }
+
+        select {
+            width: 100%;
+            padding: 10px;
+        }
+
+        button {
+            padding: 10px 14px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #111827;
+            color: white;
+            margin-top: 16px;
+        }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+            gap: 12px;
+            margin-top: 16px;
+        }
+
+        .media-card {
+            border: 2px solid #ddd;
+            border-radius: 10px;
+            padding: 8px;
+            background: #fafafa;
+            cursor: pointer;
+        }
+
+        .media-card.selected {
+            border-color: #111827;
+            background: #eef2ff;
+        }
+
+        .media-card img,
+        .media-card video {
+            width: 100%;
+            height: 100px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #ddd;
+        }
+
+        .selected-list {
+            display: grid;
+            gap: 10px;
+            margin-top: 16px;
+        }
+
+        .selected-item {
+            display: grid;
+            grid-template-columns: 80px 1fr auto;
+            gap: 12px;
+            align-items: center;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 8px;
+            background: #fafafa;
+            cursor: grab;
+        }
+
+        .selected-item.dragging {
+            opacity: 0.5;
+            border: 2px dashed #111827;
+        }
+
+        .selected-item img,
+        .selected-item video {
+            width: 80px;
+            height: 60px;
+            object-fit: cover;
+            border-radius: 8px;
+        }
+
+        .platforms {
+            display: grid;
+            gap: 8px;
+            margin-top: 8px;
+        }
+
+        .hint {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .secondary {
+            background: #e5e7eb;
+            color: #111827;
+            margin-left: 4px;
+        }
+
+        .danger {
+            background: #b91c1c;
+            color: white;
+            margin-left: 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <h1>Criar post de veículo existente</h1>
+
+        <form method="post" id="create-post-form">
+            {% csrf_token %}
+
+            <label for="{{ form.vehicle.id_for_label }}">Veículo</label>
+            {{ form.vehicle }}
+
+            {{ form.media_asset_ids }}
+            <label for="{{ form.post_type.id_for_label }}">Tipo de post</label>
+            {{ form.post_type }}
+
+            <label>Mídias do veículo</label>
+            <div class="hint">Clique nas mídias que entram nesse post. Depois organize a ordem abaixo.</div>
+
+            <div id="media-grid" class="media-grid"></div>
+
+            <label>Mídias selecionadas e ordem do post</label>
+            <div id="selected-list" class="selected-list"></div>
+
+            <label>Plataformas</label>
+            <div class="platforms">
+                {{ form.platforms }}
+            </div>
+
+            <button type="submit">Gerar post</button>
+        </form>
+    </div>
+
+    <script>
+        const vehicleSelect = document.getElementById("{{ form.vehicle.id_for_label }}");
+        const mediaAssetIdsInput = document.getElementById("{{ form.media_asset_ids.id_for_label }}");
+        const mediaGrid = document.getElementById("media-grid");
+        const selectedList = document.getElementById("selected-list");
+
+        const vehiclesMedia = {
+            {% for vehicle in vehicles %}
+                "{{ vehicle.id }}": [
+                    {% for media in vehicle.media_assets.all %}
+                        {
+                            id: "{{ media.id }}",
+                            fileUrl: "{{ media.file.url }}",
+                            mediaType: "{{ media.media_type }}",
+                            fileName: "{{ media.file.name|escapejs }}"
+                        },
+                    {% endfor %}
+                ],
+            {% endfor %}
+        };
+
+        let selectedMedia = [];
+        let draggedIndex = null;
+
+        vehicleSelect.addEventListener("change", () => {
+            selectedMedia = [];
+            renderMediaGrid();
+            renderSelectedList();
+            syncSelectedIds();
+        });
+
+        function getCurrentVehicleMedia() {
+            return vehiclesMedia[vehicleSelect.value] || [];
+        }
+
+        function renderMediaGrid() {
+            mediaGrid.innerHTML = "";
+
+            const mediaItems = getCurrentVehicleMedia();
+
+            mediaItems.forEach((media) => {
+                const card = document.createElement("div");
+                card.className = "media-card";
+
+                if (selectedMedia.some((item) => item.id === media.id)) {
+                    card.classList.add("selected");
+                }
+
+                const preview = createPreviewElement(media);
+                const label = document.createElement("div");
+                label.textContent = media.fileName;
+                label.className = "hint";
+
+                card.appendChild(preview);
+                card.appendChild(label);
+
+                card.onclick = () => toggleMedia(media);
+
+                mediaGrid.appendChild(card);
+            });
+        }
+
+        function toggleMedia(media) {
+            const existingIndex = selectedMedia.findIndex((item) => item.id === media.id);
+
+            if (existingIndex >= 0) {
+                selectedMedia.splice(existingIndex, 1);
+            } else {
+                selectedMedia.push(media);
+            }
+
+            renderMediaGrid();
+            renderSelectedList();
+            syncSelectedIds();
+        }
+
+        function renderSelectedList() {
+            selectedList.innerHTML = "";
+
+            selectedMedia.forEach((media, index) => {
+                const item = document.createElement("div");
+                item.className = "selected-item";
+                item.draggable = true;
+
+                item.addEventListener("dragstart", () => {
+                    draggedIndex = index;
+                    item.classList.add("dragging");
+                });
+
+                item.addEventListener("dragend", () => {
+                    draggedIndex = null;
+                    item.classList.remove("dragging");
+                });
+
+                item.addEventListener("dragover", (event) => {
+                    event.preventDefault();
+                });
+
+                item.addEventListener("drop", (event) => {
+                    event.preventDefault();
+
+                    if (draggedIndex === null || draggedIndex === index) {
+                        return;
+                    }
+
+                    moveSelectedMedia(draggedIndex, index);
+                });
+
+                const preview = createPreviewElement(media);
+
+                const info = document.createElement("div");
+                info.innerHTML = `<strong>Ordem ${index + 1}</strong><br><span class="hint">${media.fileName}</span>`;
+
+                const actions = document.createElement("div");
+
+                const upButton = document.createElement("button");
+                upButton.type = "button";
+                upButton.className = "secondary";
+                upButton.textContent = "Subir";
+                upButton.disabled = index === 0;
+                upButton.onclick = () => moveSelectedMedia(index, index - 1);
+
+                const downButton = document.createElement("button");
+                downButton.type = "button";
+                downButton.className = "secondary";
+                downButton.textContent = "Descer";
+                downButton.disabled = index === selectedMedia.length - 1;
+                downButton.onclick = () => moveSelectedMedia(index, index + 1);
+
+                const removeButton = document.createElement("button");
+                removeButton.type = "button";
+                removeButton.className = "danger";
+                removeButton.textContent = "Remover";
+                removeButton.onclick = () => toggleMedia(media);
+
+                actions.appendChild(upButton);
+                actions.appendChild(downButton);
+                actions.appendChild(removeButton);
+
+                item.appendChild(preview);
+                item.appendChild(info);
+                item.appendChild(actions);
+
+                selectedList.appendChild(item);
+            });
+        }
+
+        function createPreviewElement(media) {
+            if (media.mediaType === "video") {
+                const video = document.createElement("video");
+                video.src = media.fileUrl;
+                video.controls = true;
+                return video;
+            }
+
+            const img = document.createElement("img");
+            img.src = media.fileUrl;
+            return img;
+        }
+
+        function moveSelectedMedia(fromIndex, toIndex) {
+            const item = selectedMedia.splice(fromIndex, 1)[0];
+            selectedMedia.splice(toIndex, 0, item);
+
+            renderSelectedList();
+            syncSelectedIds();
+        }
+
+        function syncSelectedIds() {
+            mediaAssetIdsInput.value = selectedMedia.map((media) => media.id).join(",");
+        }
+
+        renderMediaGrid();
+    </script>
+</body>
+</html>

@@ -5,7 +5,7 @@ from posts.models import SocialPost
 from reviews.models import Review
 
 
-def run_post_pipeline(vehicle, media_assets=None, platforms=None):
+def run_post_pipeline(vehicle, media_assets=None, platforms=None, post_type="carousel"):
     existing_post = SocialPost.objects.filter(
         vehicle=vehicle,
         review__status="pending",
@@ -16,7 +16,11 @@ def run_post_pipeline(vehicle, media_assets=None, platforms=None):
 
     vehicle = normalize_vehicle(vehicle)
 
-    social_post = generate_social_post(vehicle, media_assets=media_assets)
+    social_post = generate_social_post(
+    vehicle,
+    media_assets=media_assets,
+    post_type=post_type,
+)
 
     generate_platform_posts(social_post, platforms=platforms)
 
