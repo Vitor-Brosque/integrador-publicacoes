@@ -2,4 +2,8 @@ from django.apps import AppConfig
 
 
 class MediaLibraryConfig(AppConfig):
-    name = 'media_library'
+    default_auto_field = "django.db.models.BigAutoField"
+    name = "media_library"
+
+    def ready(self):
+        import media_library.signals
