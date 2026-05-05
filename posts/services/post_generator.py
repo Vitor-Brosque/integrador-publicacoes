@@ -2,10 +2,14 @@ from ai.post_content_generator import generate_post_content
 from posts.models import PostMedia, SocialPost
 
 
-def generate_social_post(vehicle):
+def generate_social_post(vehicle, media_assets=None):
     generated_content = generate_post_content(vehicle)
 
-    vehicle_media = list(vehicle.media_assets.order_by("id"))
+    if media_assets is None:
+        vehicle_media = list(vehicle.media_assets.order_by("id"))
+    else:
+        vehicle_media = list(media_assets)
+
     main_media = vehicle_media[0] if vehicle_media else None
 
     post = SocialPost.objects.create(
