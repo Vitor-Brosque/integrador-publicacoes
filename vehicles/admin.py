@@ -1,7 +1,21 @@
 from django.contrib import admin, messages
 
+from media_library.models import MediaAsset
 from posts.services.post_pipeline import run_post_pipeline
 from .models import Vehicle
+
+
+class MediaAssetInline(admin.TabularInline):
+    model = MediaAsset
+    extra = 5
+    fields = (
+        "media_type",
+        "file",
+        "public_url",
+        "thumbnail",
+        "duration_seconds",
+        "aspect_ratio",
+    )
 
 
 @admin.register(Vehicle)
@@ -19,6 +33,7 @@ class VehicleAdmin(admin.ModelAdmin):
     search_fields = ("raw_input", "brand", "model", "version")
     list_filter = ("category", "enrichment_status", "created_at")
     actions = ("generate_organic_post",)
+    inlines = [MediaAssetInline]
 
     @admin.action(description="Gerar post orgânico")
     def generate_organic_post(self, request, queryset):
