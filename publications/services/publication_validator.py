@@ -19,5 +19,13 @@ def validate_publication_target(publication_target):
 
     if publication_target.social_account.status != "connected":
         raise ValueError("A conta social precisa estar conectada.")    
-    
+   
+    post_media_items = platform_post.social_post.post_media.all()
+
+    for post_media in post_media_items:
+        if not post_media.media_asset.public_url:
+            raise ValueError("Todas as mídias do post precisam ter URL pública antes da publicação.")
+
+
+
     return True
