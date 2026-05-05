@@ -99,6 +99,22 @@
             background: #ddd;
         }
 
+        .preview-item {
+        cursor: grab;
+         }
+
+         .preview-item.dragging {
+             opacity: 0.5;
+             border: 2px dashed #111827;
+         }
+
+         .order-input {
+             width: 70px;
+             padding: 6px;
+             border: 1px solid #ccc;
+             border-radius: 6px;
+         }
+
         .file-info {
             font-size: 14px;
         }
@@ -145,111 +161,176 @@
         </form>
     </div>
 
-    <script>
-        const fileInput = document.getElementById("{{ form.media_files.id_for_label }}");
-        const previewList = document.getElementById("preview-list");
+   <script>
+       const fileInput = document.getElementById("{{ form.media_files.id_for_label }}");
+       const previewList = document.getElementById("preview-list");
 
-        let selectedFiles = [];
+       let selectedFiles = [];
+       let draggedIndex = null;
 
-        fileInput.addEventListener("change", function () {
-            selectedFiles = Array.from(fileInput.files);
-            renderPreview();
-            syncInputFiles();
-        });
+       fileInput.addEventListener("change", function () {
+           selectedFiles = Array.from(fileInput.files);
+           renderPreview();
+           syncInputFiles();
+       });
 
-        function renderPreview() {
-            previewList.innerHTML = "";
+       function renderPreview() {
+           previewList.innerHTML = "";
 
-            selectedFiles.forEach((file, index) => {
-                const item = document.createElement("div");
-                item.className = "preview-item";
+           selectedFiles.forEach((file, index) => {
+               const item = document.createElement("div");
+               item.className = "preview-item";
+               item.draggable = true;
 
-                const mediaWrapper = document.createElement("div");
+               item.addEventListener("dragstart", () => {
+                   draggedIndex = index;
+                   item.classList.add("dragging");
+               });
 
-                if (file.type.startsWith("image/")) {
-                    const img = document.createElement("img");
-                    img.src = URL.createObjectURL(file);
-                    mediaWrapper.appendChild(img);
-                } else if (file.type.startsWith("video/")) {
-                    const video = document.createElement("video");
-                    video.src = URL.createObjectURL(file);
-                    video.controls = true;
-                    mediaWrapper.appendChild(video);
-                } else {
-                    mediaWrapper.textContent = "Arquivo";
-                }
+               item.addEventListener("dragend", () => {
+                   draggedIndex = null;
+                   item.classList.remove("dragging");
+               });
 
-                const info = document.createElement("div");
-                info.className = "file-info";
+               item.addEventListener("dragover", (event) => {
+                   event.preventDefault();
+               });
 
-                const fileName = document.createElement("div");
-                fileName.className = "file-name";
-                fileName.textContent = file.name;
+               item.addEventListener("drop", (event) => {
+                   event.preventDefault();
 
-                const fileOrder = document.createElement("div");
-                fileOrder.className = "file-order";
-                fileOrder.textContent = `Ordem no carrossel: ${index + 1}`;
+                   if (draggedIndex === null || draggedIndex === index) {
+                       return;
+                   }
 
-                info.appendChild(fileName);
-                info.appendChild(fileOrder);
+                   moveFile(draggedIndex, index);
+               });
 
-                const actions = document.createElement("div");
-                actions.className = "actions";
+               const mediaWrapper = document.createElement("div");
 
-                const upButton = document.createElement("button");
-                upButton.type = "button";
-                upButton.className = "secondary";
-                upButton.textContent = "Subir";
-                upButton.disabled = index === 0;
-                upButton.onclick = () => moveFile(index, index - 1);
+               if (file.type.startsWith("image/")) {
+                   const img = document.createElement("img");
+                   img.src = URL.createObjectURL(file);
+                   mediaWrapper.appendChild(img);
+               } else if (file.type.startsWith("video/")) {
+                   const video = document.createElement("video");
+                   video.src = URL.createObjectURL(file);
+                   video.controls = true;
+                   mediaWrapper.appendChild(video);
+               } else {
+                   mediaWrapper.textContent = "Arquivo";
+               }
 
-                const downButton = document.createElement("button");
-                downButton.type = "button";
-                downButton.className = "secondary";
-                downButton.textContent = "Descer";
-                downButton.disabled = index === selectedFiles.length - 1;
-                downButton.onclick = () => moveFile(index, index + 1);
+               const info = document.createElement("div");
+               info.className = "file-info";
 
-                const removeButton = document.createElement("button");
-                removeButton.type = "button";
-                removeButton.className = "danger";
-                removeButton.textContent = "Remover";
-                removeButton.onclick = () => removeFile(index);
+               const fileName = document.createElement("div");
+               fileName.className = "file-name";
+               fileName.textContent = file.name;
 
-                actions.appendChild(upButton);
-                actions.appendChild(downButton);
-                actions.appendChild(removeButton);
+               const fileOrder = document.createElement("div");
+               fileOrder.className = "file-order";
+               fileOrder.textContent = "Ordem no carrossel: ";
 
-                item.appendChild(mediaWrapper);
-                item.appendChild(info);
-                item.appendChild(actions);
+               const orderInput = document.createElement("input");
+               orderInput.className = "order-input";
+               orderInput.type = "number";
+               orderInput.min = "1";
+               orderInput.max = String(selectedFiles.length);
+               orderInput.value = String(index + 1);
 
-                previewList.appendChild(item);
-            });
-        }
+               orderInput.addEventListener("change", () => {
+                   const newPosition = parseInt(orderInput.value, 10);
 
-        function moveFile(fromIndex, toIndex) {
-            const file = selectedFiles.splice(fromIndex, 1)[0];
-            selectedFiles.splice(toIndex, 0, file);
-            renderPreview();
-            syncInputFiles();
-        }
+                   if (
+                       Number.isNaN(newPosition) ||
+                       newPosition < 1 ||
+                       newPosition > selectedFiles.length
+                   ) {
+                       orderInput.value = String(index + 1);
+                       return;
+                   }
 
-        function removeFile(index) {
-            selectedFiles.splice(index, 1);
-            renderPreview();
-            syncInputFiles();
-        }
+                   moveFile(index, newPosition - 1);
+               });
 
-        function syncInputFiles() {
-            const dataTransfer = new DataTransfer();
+               fileOrder.appendChild(orderInput);
 
-            selectedFiles.forEach((file) => {
-                dataTransfer.items.add(file);
-            });
+               const dragHint = document.createElement("div");
+               dragHint.className = "hint";
+               dragHint.textContent = "Arraste para reorganizar ou digite a posição.";
 
-            fileInput.files = dataTransfer.files;
-        }
-    </script>
+               info.appendChild(fileName);
+               info.appendChild(fileOrder);
+               info.appendChild(dragHint);
+
+               const actions = document.createElement("div");
+               actions.className = "actions";
+
+               const upButton = document.createElement("button");
+               upButton.type = "button";
+               upButton.className = "secondary";
+               upButton.textContent = "Subir";
+               upButton.disabled = index === 0;
+               upButton.onclick = () => moveFile(index, index - 1);
+
+               const downButton = document.createElement("button");
+               downButton.type = "button";
+               downButton.className = "secondary";
+               downButton.textContent = "Descer";
+               downButton.disabled = index === selectedFiles.length - 1;
+               downButton.onclick = () => moveFile(index, index + 1);
+
+               const removeButton = document.createElement("button");
+               removeButton.type = "button";
+               removeButton.className = "danger";
+               removeButton.textContent = "Remover";
+               removeButton.onclick = () => removeFile(index);
+
+               actions.appendChild(upButton);
+               actions.appendChild(downButton);
+               actions.appendChild(removeButton);
+
+               item.appendChild(mediaWrapper);
+               item.appendChild(info);
+               item.appendChild(actions);
+
+               previewList.appendChild(item);
+           });
+       }
+
+       function moveFile(fromIndex, toIndex) {
+           if (
+               fromIndex < 0 ||
+               toIndex < 0 ||
+               fromIndex >= selectedFiles.length ||
+               toIndex >= selectedFiles.length
+           ) {
+               return;
+           }
+
+           const file = selectedFiles.splice(fromIndex, 1)[0];
+           selectedFiles.splice(toIndex, 0, file);
+
+           renderPreview();
+           syncInputFiles();
+       }
+
+       function removeFile(index) {
+           selectedFiles.splice(index, 1);
+           renderPreview();
+           syncInputFiles();
+       }
+
+       function syncInputFiles() {
+           const dataTransfer = new DataTransfer();
+
+           selectedFiles.forEach((file) => {
+               dataTransfer.items.add(file);
+           });
+
+           fileInput.files = dataTransfer.files;
+       }
+   </script>
 </body>
 </html>
