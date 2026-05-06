@@ -26,7 +26,7 @@ Hatch"""
         self.assertEqual(post.platform_posts.count(), 5)
         self.assertEqual(post.review.status, "pending")
 
-    def test_run_post_pipeline_does_not_duplicate_pending_post(self):
+    def test_run_post_pipeline_allows_multiple_posts_for_same_vehicle(self):
         vehicle = Vehicle.objects.create(
             raw_input="""Volkswagen Gol
     1.0 FLEX MANUAL
@@ -40,10 +40,9 @@ Hatch"""
         first_post = run_post_pipeline(vehicle)
         second_post = run_post_pipeline(vehicle)
 
-        self.assertEqual(first_post.id, second_post.id)
-        self.assertEqual(vehicle.social_posts.count(), 1)
-
-
+        self.assertNotEqual(first_post.id, second_post.id)
+        self.assertEqual(vehicle.social_posts.count(), 2)
+    
     def test_run_post_pipeline_with_no_media_creates_post_without_post_media(self):
         vehicle = Vehicle.objects.create(
             raw_input="""Volkswagen Gol

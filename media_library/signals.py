@@ -29,4 +29,7 @@ def upload_media_asset_after_save(sender, instance, created, **kwargs):
     if instance.public_url:
         return
 
-    upload_media_asset_to_public_storage(instance)
+    try:
+        upload_media_asset_to_public_storage(instance)
+    except Exception as error:
+        print(f"Erro ao enviar mídia {instance.id} para R2: {error}")

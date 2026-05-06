@@ -1,9 +1,13 @@
 from django.contrib import messages
-from django.shortcuts import redirect, render
-
+from django.shortcuts import get_object_or_404, redirect, render
+from publications.models import PublicationTarget
 from media_library.models import MediaAsset
+from media_library.services.media_uploader import upload_media_asset_to_public_storage
 from posts.forms import CreatePostForm, CreatePostFromVehicleForm
+from posts.models import SocialPost
 from posts.services.post_pipeline import run_post_pipeline
+from publications.services.publication_creator import create_publication_targets
+from publications.services.publisher import publish_to_platform
 from vehicles.models import Vehicle
 
 
@@ -26,11 +30,13 @@ def create_post(request):
                     else "image"
                 )
 
-                MediaAsset.objects.create(
+                media_asset = MediaAsset.objects.create(
                     vehicle=vehicle,
                     media_type=media_type,
                     file=media_file,
                 )
+
+                upload_media_asset_to_public_storage(media_asset)
 
             social_post = run_post_pipeline(vehicle)
 
@@ -39,7 +45,7 @@ def create_post(request):
                 f"Post #{social_post.id} gerado com sucesso.",
             )
 
-            return redirect("admin:posts_socialpost_change", social_post.id)
+            return redirect("posts:review_post", post_id=social_post.id)
 
     else:
         form = CreatePostForm()
@@ -149,7 +155,7 @@ def create_post_from_vehicle(request):
                 f"Post #{social_post.id} gerado com sucesso.",
             )
 
-            return redirect("admin:posts_socialpost_change", social_post.id)
+            return redirect("posts:review_post", post_id=social_post.id)
 
     else:
         form = CreatePostFromVehicleForm()
@@ -164,3 +170,153 @@ def create_post_from_vehicle(request):
             "vehicles": vehicles,
         },
     )
+
+
+def review_post(request, post_id):
+    social_post = get_object_or_404(
+        SocialPost.objects.select_related("vehicle", "review").prefetch_related(
+            "post_media__media_asset",
+            "platform_posts",
+        ),
+        id=post_id,
+    )
+
+    publications = PublicationTarget.objects.filter(
+        platform_post__social_post=social_post,
+    ).select_related(
+        "platform_post",
+        "social_account",
+    )
+
+    return render(
+        request,
+        "posts/review_post.html",
+        {
+            "post": social_post,
+            "publications": publications,
+        },
+    )
+
+def save_review_post(request, post_id):
+    if request.method != "POST":
+        return redirect("posts:review_post", post_id=post_id)
+
+    social_post = get_object_or_404(
+        SocialPost.objects.prefetch_related("platform_posts"),
+        id=post_id,
+    )
+
+    if social_post.review.status == "approved":
+        messages.error(
+            request,
+            "Este post já foi aprovado. Não edite o texto depois da aprovação.",
+        )
+        return redirect("posts:review_post", post_id=social_post.id)
+
+    social_post.base_title = request.POST.get("base_title", "")
+    social_post.base_caption = request.POST.get("base_caption", "")
+    social_post.cta = request.POST.get("cta", "")
+    social_post.hashtags = request.POST.get("hashtags", "")
+
+    social_post.save(
+        update_fields=[
+            "base_title",
+            "base_caption",
+            "cta",
+            "hashtags",
+            "updated_at",
+        ]
+    )
+
+    for platform_post in social_post.platform_posts.all():
+        platform_post.title = request.POST.get(
+            f"platform_{platform_post.id}_title",
+            "",
+        )
+        platform_post.caption = request.POST.get(
+            f"platform_{platform_post.id}_caption",
+            "",
+        )
+        platform_post.description = request.POST.get(
+            f"platform_{platform_post.id}_description",
+            "",
+        )
+        platform_post.hashtags = request.POST.get(
+            f"platform_{platform_post.id}_hashtags",
+            "",
+        )
+
+        platform_post.save(
+            update_fields=[
+                "title",
+                "caption",
+                "description",
+                "hashtags",
+                "updated_at",
+            ]
+        )
+
+    messages.success(request, "Textos do post salvos com sucesso.")
+
+    return redirect("posts:review_post", post_id=social_post.id)
+
+
+
+
+
+def approve_post(request, post_id):
+    if request.method != "POST":
+        return redirect("posts:review_post", post_id=post_id)
+
+    social_post = get_object_or_404(SocialPost.objects.select_related("review"), id=post_id)
+
+    social_post.review.status = "approved"
+    social_post.review.save(update_fields=["status"])
+
+    create_publication_targets(social_post)
+
+    messages.success(
+        request,
+        f"Post #{social_post.id} aprovado e publicações criadas.",
+    )
+
+    return redirect("posts:review_post", post_id=social_post.id)
+
+
+def publish_post(request, post_id):
+    if request.method != "POST":
+        return redirect("posts:review_post", post_id=post_id)
+
+    social_post = get_object_or_404(SocialPost, id=post_id)
+
+    publications = PublicationTarget.objects.filter(
+        platform_post__social_post=social_post,
+    ).select_related(
+        "platform_post",
+        "social_account",
+    )
+
+    published_count = 0
+    failed_count = 0
+
+    for publication in publications:
+        try:
+            publish_to_platform(publication)
+            published_count += 1
+        except Exception as error:
+            failed_count += 1
+            print(f"Erro ao publicar PublicationTarget #{publication.id}: {error}")
+
+    if published_count:
+        messages.success(
+            request,
+            f"{published_count} publicação(ões) marcada(s) como publicada(s).",
+        )
+
+    if failed_count:
+        messages.error(
+            request,
+            f"{failed_count} publicação(ões) falharam. Veja o terminal/log.",
+        )
+
+    return redirect("posts:review_post", post_id=social_post.id)

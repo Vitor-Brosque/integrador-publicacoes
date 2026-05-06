@@ -27,3 +27,11 @@ staticfiles/
 
 # Logs
 *.log
+
+#Media
+.vehicle_media
+
+node_modules/
+cloudflare/r2-upload-worker/node_modules/
+
+r2_worker_test.txt

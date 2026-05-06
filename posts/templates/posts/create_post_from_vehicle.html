@@ -169,7 +169,7 @@
                     {% for media in vehicle.media_assets.all %}
                         {
                             id: "{{ media.id }}",
-                            fileUrl: "{{ media.file.url }}",
+                            fileUrl: "{% if media.public_url %}{{ media.public_url }}{% else %}{{ media.file.url }}{% endif %}",ileUrl: "{{ media.file.url }}",
                             mediaType: "{{ media.media_type }}",
                             fileName: "{{ media.file.name|escapejs }}"
                         },

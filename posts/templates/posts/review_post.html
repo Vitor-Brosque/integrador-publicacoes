@@ -1,0 +1,306 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Revisar post #{{ post.id }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+
+        h1, h2, h3 {
+            margin-top: 0;
+        }
+
+        .muted {
+            color: #666;
+            font-size: 14px;
+        }
+
+        .messages {
+            margin-bottom: 20px;
+        }
+
+        .message {
+            padding: 12px;
+            border-radius: 8px;
+            margin-bottom: 8px;
+            background: #e5e7eb;
+        }
+
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px;
+        }
+
+        .media-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 10px;
+            background: #fafafa;
+        }
+
+        .media-card img,
+        .media-card video {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #ddd;
+        }
+
+        .platform-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+            background: #fafafa;
+            margin-bottom: 12px;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            background: #e5e7eb;
+            font-size: 13px;
+            margin-bottom: 8px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        button,
+        .button-link {
+            padding: 10px 14px;
+            border: 0;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 14px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+            display: inline-block;
+        }
+
+        button.secondary,
+        .button-link.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        button.success {
+            background: #166534;
+        }
+
+        button.warning {
+            background: #92400e;
+        }
+
+        pre {
+            white-space: pre-wrap;
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        .status {
+            font-weight: bold;
+        }
+
+        .status-pending {
+            color: #92400e;
+        }
+
+        .status-approved {
+            color: #166534;
+        }
+
+        .status-published {
+            color: #166534;
+        }
+    </style>
+</head>
+<body>
+    <div class="messages">
+        {% for message in messages %}
+            <div class="message">{{ message }}</div>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h1>Revisar post #{{ post.id }}</h1>
+
+        <p>
+            <strong>Veículo:</strong> {{ post.vehicle }}
+        </p>
+
+        <p>
+            <strong>Tipo do post:</strong> {{ post.get_post_type_display }}
+        </p>
+
+        <p>
+            <strong>Status da revisão:</strong>
+            <span class="status status-{{ post.review.status }}">
+                {{ post.review.get_status_display }}
+            </span>
+        </p>
+
+        <p class="muted">
+            Criado em {{ post.created_at }}
+        </p>
+
+        <div class="actions">
+            <a class="button-link secondary" href="{% url 'posts:create_post_from_vehicle' %}">
+                Criar outro post
+            </a>
+
+            <a class="button-link secondary" href="/admin/posts/socialpost/{{ post.id }}/change/">
+                Abrir no admin
+            </a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Mídias do post</h2>
+
+        {% if post.post_media.all %}
+            <div class="media-grid">
+                {% for item in post.post_media.all %}
+                    <div class="media-card">
+                        <div class="badge">Ordem {{ item.order }}</div>
+
+                        {% if item.media_asset.media_type == "video" %}
+                            <video src="{{ item.media_asset.public_url }}" controls></video>
+                        {% else %}
+                            <img src="{{ item.media_asset.public_url }}" alt="Mídia {{ item.order }}">
+                        {% endif %}
+
+                        <p class="muted">
+                            MediaAsset #{{ item.media_asset.id }}
+                        </p>
+
+                        <p class="muted">
+                            {{ item.media_asset.public_url }}
+                        </p>
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p>Nenhuma mídia vinculada a este post.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Texto base</h2>
+
+        <p><strong>Título:</strong> {{ post.base_title }}</p>
+
+        <p><strong>Legenda:</strong></p>
+        <pre>{{ post.base_caption }}</pre>
+
+        <p><strong>CTA:</strong> {{ post.cta }}</p>
+
+        <p><strong>Hashtags:</strong></p>
+        <pre>{{ post.hashtags }}</pre>
+    </div>
+
+    <div class="card">
+        <h2>Textos por plataforma</h2>
+
+        {% for platform_post in post.platform_posts.all %}
+            <div class="platform-card">
+                <h3>{{ platform_post.get_platform_display }}</h3>
+
+                <p><strong>Título:</strong> {{ platform_post.title }}</p>
+
+                <p><strong>Legenda:</strong></p>
+                <pre>{{ platform_post.caption }}</pre>
+
+                <p><strong>Descrição:</strong></p>
+                <pre>{{ platform_post.description }}</pre>
+
+                <p><strong>Hashtags:</strong></p>
+                <pre>{{ platform_post.hashtags }}</pre>
+            </div>
+        {% empty %}
+            <p>Nenhum texto por plataforma foi gerado.</p>
+        {% endfor %}
+    </div>
+
+    <div class="card">
+        <h2>Publicações</h2>
+
+        {% if publications %}
+            {% for publication in publications %}
+                <div class="platform-card">
+                    <h3>{{ publication.platform_post.get_platform_display }}</h3>
+
+                    <p>
+                        <strong>Status:</strong>
+                        <span class="status status-{{ publication.status }}">
+                            {{ publication.get_status_display }}
+                        </span>
+                    </p>
+
+                    <p><strong>Conta social:</strong> {{ publication.social_account|default:"Nenhuma conta vinculada" }}</p>
+
+                    <p><strong>External post ID:</strong> {{ publication.external_post_id }}</p>
+
+                    <p>
+                        <strong>External URL:</strong>
+                        {% if publication.external_url %}
+                            <a href="{{ publication.external_url }}" target="_blank">{{ publication.external_url }}</a>
+                        {% else %}
+                            -
+                        {% endif %}
+                    </p>
+
+                    {% if publication.error_message %}
+                        <p><strong>Mensagem/payload:</strong></p>
+                        <pre>{{ publication.error_message }}</pre>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhuma publicação criada ainda. Aprove o post para criar as publicações.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Ações</h2>
+
+        <div class="actions">
+            {% if post.review.status != "approved" %}
+                <form method="post" action="{% url 'posts:approve_post' post.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="success">Aprovar post</button>
+                </form>
+            {% endif %}
+
+            {% if post.review.status == "approved" %}
+                <form method="post" action="{% url 'posts:publish_post' post.id %}">
+                    {% csrf_token %}
+                    <button type="submit" class="warning">Publicar fake</button>
+                </form>
+            {% endif %}
+        </div>
+    </div>
+</body>
+</html>
