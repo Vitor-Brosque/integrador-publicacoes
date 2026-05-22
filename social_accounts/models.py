@@ -17,12 +17,15 @@ class SocialAccount(models.Model):
     )
 
     account_name = models.CharField(max_length=160)
-    external_account_id = models.CharField(max_length=255, blank=True)
+    external_account_id = models.CharField(max_length=255, blank=True, null=True)
 
-    access_token = models.TextField(blank=True)
-    refresh_token = models.TextField(blank=True)
+    access_token = models.TextField(blank=True, null=True)
+    refresh_token = models.TextField(blank=True, null=True)
 
-    scopes = models.TextField(blank=True)
+    scopes = models.TextField(blank=True, null=True)
+
+    page_id = models.CharField(max_length=255, blank=True, null=True)
+    metadata = models.JSONField(default=dict, blank=True)
 
     status = models.CharField(
         max_length=30,

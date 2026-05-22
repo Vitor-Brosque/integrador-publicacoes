@@ -1,13 +1,16 @@
 from django.contrib import messages
+from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
 from publications.models import PublicationTarget
 from media_library.models import MediaAsset
 from media_library.services.media_uploader import upload_media_asset_to_public_storage
+from pathlib import Path
 from posts.forms import CreatePostForm, CreatePostFromVehicleForm
 from posts.models import SocialPost
 from posts.services.post_pipeline import run_post_pipeline
 from publications.services.publication_creator import create_publication_targets
 from publications.services.publisher import publish_to_platform
+from publications.services.real_publisher import publish_to_real_platform
 from vehicles.models import Vehicle
 
 
@@ -60,6 +63,7 @@ def create_post(request):
 
 
 def create_post_from_vehicle(request):
+    selected_vehicle_id = request.GET.get("vehicle_id")
     if request.method == "POST":
         form = CreatePostFromVehicleForm(request.POST)
 
@@ -86,62 +90,28 @@ def create_post_from_vehicle(request):
                 if media_id in media_assets_by_id
             ]
 
-            if not ordered_media_assets:
-                messages.error(
-                    request,
-                    "Selecione pelo menos uma mídia para criar o post.",
-                )
-                return redirect("posts:create_post_from_vehicle")
-
-            if post_type == "single_image":
-                if len(ordered_media_assets) != 1:
-                    messages.error(
-                        request,
-                        "Foto única precisa ter exatamente uma mídia.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
-
-                if ordered_media_assets[0].media_type != "image":
-                    messages.error(
-                        request,
-                        "Foto única precisa usar uma mídia do tipo imagem.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
-
-            if post_type == "carousel":
-                if len(ordered_media_assets) < 2:
-                    messages.error(
-                        request,
-                        "Carrossel precisa ter pelo menos duas imagens.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
-
-                has_non_image = any(
-                    media_asset.media_type != "image"
-                    for media_asset in ordered_media_assets
+            media_validation_error = validate_post_media_selection(post_type, ordered_media_assets)
+            if media_validation_error:
+                messages.error(request, media_validation_error)
+                return redirect_with_vehicle_context(
+                    "posts:create_post_from_vehicle",
+                    vehicle_id=vehicle.id,
                 )
 
-                if has_non_image:
-                    messages.error(
-                        request,
-                        "Carrossel precisa usar apenas mídias do tipo imagem.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
+            platform_validation_error = validate_platform_post_type_compatibility(
+                platforms,
+                post_type,
+            )
+            if platform_validation_error:
+                messages.error(request, platform_validation_error)
+                return redirect_with_vehicle_context(
+                    "posts:create_post_from_vehicle",
+                    vehicle_id=vehicle.id,
+                )
 
-            if post_type == "video":
-                if len(ordered_media_assets) != 1:
-                    messages.error(
-                        request,
-                        "Post de vídeo precisa ter exatamente uma mídia.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
-
-                if ordered_media_assets[0].media_type != "video":
-                    messages.error(
-                        request,
-                        "Post de vídeo precisa usar uma mídia do tipo vídeo.",
-                    )
-                    return redirect("posts:create_post_from_vehicle")
+            platform_messages = build_platform_selection_messages(platforms, post_type)
+            for message_text in platform_messages:
+                messages.warning(request, message_text)
 
             social_post = run_post_pipeline(
                 vehicle,
@@ -158,7 +128,13 @@ def create_post_from_vehicle(request):
             return redirect("posts:review_post", post_id=social_post.id)
 
     else:
-        form = CreatePostFromVehicleForm()
+        initial = {}
+        if selected_vehicle_id:
+            selected_vehicle = Vehicle.objects.filter(id=selected_vehicle_id).first()
+            if selected_vehicle is not None:
+                initial["vehicle"] = selected_vehicle.pk
+
+        form = CreatePostFromVehicleForm(initial=initial)
 
     vehicles = Vehicle.objects.prefetch_related("media_assets").order_by("-created_at")
 
@@ -187,6 +163,10 @@ def review_post(request, post_id):
         "platform_post",
         "social_account",
     )
+    has_pending_instagram_publication = publications.filter(
+        platform_post__platform="instagram",
+        status="pending",
+    ).exists()
 
     return render(
         request,
@@ -194,8 +174,51 @@ def review_post(request, post_id):
         {
             "post": social_post,
             "publications": publications,
+            "has_pending_instagram_publication": has_pending_instagram_publication,
         },
     )
+
+
+def post_list(request):
+    posts = (
+        SocialPost.objects.select_related("vehicle", "review")
+        .prefetch_related("platform_posts", "post_media")
+        .annotate(
+            media_count=Count("post_media", distinct=True),
+            platform_count=Count("platform_posts", distinct=True),
+        )
+        .order_by("-created_at")
+    )
+
+    return render(
+        request,
+        "posts/post_list.html",
+        {
+            "posts": posts,
+        },
+    )
+
+
+def pending_review_list(request):
+    posts = (
+        SocialPost.objects.select_related("vehicle", "review")
+        .prefetch_related("platform_posts", "post_media")
+        .filter(review__status="pending")
+        .annotate(
+            media_count=Count("post_media", distinct=True),
+            platform_count=Count("platform_posts", distinct=True),
+        )
+        .order_by("-created_at")
+    )
+
+    return render(
+        request,
+        "posts/pending_review_list.html",
+        {
+            "posts": posts,
+        },
+    )
+
 
 def save_review_post(request, post_id):
     if request.method != "POST":
@@ -261,6 +284,80 @@ def save_review_post(request, post_id):
     return redirect("posts:review_post", post_id=social_post.id)
 
 
+def validate_post_media_selection(post_type, ordered_media_assets):
+    if post_type == "single_image":
+        if len(ordered_media_assets) != 1:
+            return "Foto única exige exatamente 1 imagem."
+
+        media_asset = ordered_media_assets[0]
+        if media_asset.media_type != "image":
+            return "Foto única aceita apenas imagem."
+
+        if not is_allowed_media_extension(media_asset, allowed_extensions={".jpg", ".jpeg", ".png", ".webp"}):
+            return "Foto única aceita apenas arquivos .jpg, .jpeg, .png ou .webp."
+
+        return ""
+
+    if post_type == "carousel":
+        if len(ordered_media_assets) < 2 or len(ordered_media_assets) > 10:
+            return "Carrossel exige de 2 a 10 imagens."
+
+        for media_asset in ordered_media_assets:
+            if media_asset.media_type != "image":
+                return "Carrossel aceita apenas imagens."
+
+            if not is_allowed_media_extension(media_asset, allowed_extensions={".jpg", ".jpeg", ".png", ".webp"}):
+                return "Carrossel aceita apenas arquivos .jpg, .jpeg, .png ou .webp."
+
+        return ""
+
+    if post_type == "video":
+        if len(ordered_media_assets) != 1:
+            return "Vídeo exige exatamente 1 arquivo de vídeo."
+
+        media_asset = ordered_media_assets[0]
+        if media_asset.media_type != "video":
+            return "Vídeo aceita apenas arquivo de vídeo."
+
+        if not is_allowed_media_extension(media_asset, allowed_extensions={".mp4", ".mov"}):
+            return "Vídeo aceita apenas arquivos .mp4 ou .mov."
+
+        return ""
+
+    return "Tipo de post inválido."
+
+
+def redirect_with_vehicle_context(view_name, vehicle_id):
+    response = redirect(view_name)
+    response["Location"] = f"{response.url}?vehicle_id={vehicle_id}"
+    return response
+
+
+def validate_platform_post_type_compatibility(platforms, post_type):
+    if post_type != "video":
+        if "youtube" in platforms:
+            return "YouTube nesta versão aceita apenas posts em vídeo."
+        if "tiktok" in platforms:
+            return "TikTok nesta versão aceita apenas posts em vídeo."
+
+    return ""
+
+
+def build_platform_selection_messages(platforms, post_type):
+    messages_list = []
+    if "google_business" in platforms and post_type == "carousel":
+        messages_list.append(
+            "Google Business: nesta versão, carrossel pode ser publicado usando apenas a imagem principal."
+        )
+    return messages_list
+
+
+def is_allowed_media_extension(media_asset, allowed_extensions):
+    file_name = getattr(getattr(media_asset, "file", None), "name", "") or ""
+    suffix = Path(file_name).suffix.lower()
+    return suffix in allowed_extensions
+
+
 
 
 
@@ -320,3 +417,89 @@ def publish_post(request, post_id):
         )
 
     return redirect("posts:review_post", post_id=social_post.id)
+
+
+def publish_instagram_real(request, post_id):
+    if request.method != "POST":
+        return redirect("posts:review_post", post_id=post_id)
+
+    publication = (
+        PublicationTarget.objects.filter(
+            platform_post__social_post_id=post_id,
+            platform_post__platform="instagram",
+            status="pending",
+        )
+        .select_related(
+            "platform_post",
+            "social_account",
+        )
+        .first()
+    )
+
+    if publication is None:
+        messages.error(
+            request,
+            "Não existe publicação pendente de Instagram para enviar no modo real.",
+        )
+        return redirect("posts:review_post", post_id=post_id)
+
+    try:
+        publish_to_real_platform(publication)
+        messages.success(
+            request,
+            "Publicação real de Instagram enviada com sucesso.",
+        )
+    except Exception as error:
+        messages.error(
+            request,
+            f"Falha ao publicar Instagram real: {error}",
+        )
+
+    return redirect("posts:review_post", post_id=post_id)
+
+
+def publish_all_real(request, post_id):
+    if request.method != "POST":
+        return redirect("posts:review_post", post_id=post_id)
+
+    publications = PublicationTarget.objects.filter(
+        platform_post__social_post_id=post_id,
+    ).select_related(
+        "platform_post",
+        "social_account",
+    )
+
+    if not publications.exists():
+        messages.error(
+            request,
+            "Não existem publicações criadas para este post.",
+        )
+        return redirect("posts:review_post", post_id=post_id)
+
+    success_count = 0
+    failed_count = 0
+
+    for publication in publications:
+        try:
+            publish_to_real_platform(publication)
+            success_count += 1
+        except Exception as error:
+            failed_count += 1
+            messages.error(
+                request,
+                f"Falha ao publicar {publication.platform_post.get_platform_display()}: {error}",
+            )
+
+    if success_count:
+        messages.success(
+            request,
+            f"{success_count} publicação(ões) real(is) enviada(s) com sucesso.",
+        )
+
+    if failed_count:
+        messages.warning(
+            request,
+            f"{failed_count} publicação(ões) falharam no envio real.",
+        )
+
+    return redirect("posts:review_post", post_id=post_id)

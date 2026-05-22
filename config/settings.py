@@ -39,6 +39,7 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
 
     "vehicles",
+    "core",
     "media_library.apps.MediaLibraryConfig",
     "posts",
     "social_accounts",

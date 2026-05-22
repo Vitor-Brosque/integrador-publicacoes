@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Veículos</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        a.button-link {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+            margin-right: 6px;
+        }
+        a.button-link.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .muted { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>Veículos</h1>
+        <p class="muted">Lista operacional dos veículos cadastrados.</p>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Veículo</th>
+                    <th>Mídias</th>
+                    <th>Posts</th>
+                    <th>Criado em</th>
+                    <th>Ações</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for vehicle in vehicles %}
+                    <tr>
+                        <td>{{ vehicle.id }}</td>
+                        <td>{{ vehicle }}</td>
+                        <td>{{ vehicle.media_count }}</td>
+                        <td>{{ vehicle.post_count }}</td>
+                        <td>{{ vehicle.created_at }}</td>
+                        <td>
+                            <a class="button-link secondary" href="{% url 'vehicles:vehicle_detail' vehicle.id %}">Abrir</a>
+                            <a class="button-link" href="{% url 'posts:create_post_from_vehicle' %}?vehicle_id={{ vehicle.id }}">Criar publicação</a>
+                        </td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="6">Nenhum veículo cadastrado.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Posts pendentes</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+            vertical-align: top;
+        }
+        .button-link {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+        }
+        .muted { color: #6b7280; }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>Posts pendentes de revisão</h1>
+        <p class="muted">Somente posts com review aguardando aprovação.</p>
+    </div>
+
+    <div class="card">
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Veículo</th>
+                    <th>Tipo</th>
+                    <th>Plataformas</th>
+                    <th>Mídias</th>
+                    <th>Criado em</th>
+                    <th>Ação</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for post in posts %}
+                    <tr>
+                        <td>{{ post.id }}</td>
+                        <td>{{ post.vehicle }}</td>
+                        <td>{{ post.get_post_type_display }}</td>
+                        <td>
+                            {% for platform_post in post.platform_posts.all %}
+                                {{ platform_post.get_platform_display }}{% if not forloop.last %}, {% endif %}
+                            {% empty %}
+                                -
+                            {% endfor %}
+                        </td>
+                        <td>{{ post.media_count }}</td>
+                        <td>{{ post.created_at }}</td>
+                        <td><a class="button-link" href="{% url 'posts:review_post' post.id %}">Abrir review</a></td>
+                    </tr>
+                {% empty %}
+                    <tr>
+                        <td colspan="7">Nenhum post pendente de revisão.</td>
+                    </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</body>
+</html>

@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Integrador de Publicações</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+
+        .tile {
+            display: block;
+            padding: 20px;
+            border-radius: 12px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+            min-height: 110px;
+        }
+
+        .tile.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .count {
+            font-size: 32px;
+            font-weight: bold;
+            margin: 8px 0 0;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>Integrador de Publicações</h1>
+        <p class="muted">Fluxo operacional para veículos, posts, revisão e publicações.</p>
+    </div>
+
+    <div class="card">
+        <div class="grid">
+            <a class="tile" href="{% url 'vehicles:vehicle_create' %}">
+                <div>Cadastrar novo veículo</div>
+                <div class="count">{{ vehicle_count }}</div>
+            </a>
+            <a class="tile secondary" href="{% url 'vehicles:vehicle_list' %}">
+                <div>Ver veículos</div>
+                <div class="count">{{ vehicle_count }}</div>
+            </a>
+            <a class="tile" href="{% url 'posts:create_post_from_vehicle' %}">
+                <div>Criar publicação</div>
+                <div class="count">{{ post_count }}</div>
+            </a>
+            <a class="tile secondary" href="{% url 'posts:pending_review_list' %}">
+                <div>Posts pendentes de revisão</div>
+                <div class="count">{{ pending_review_count }}</div>
+            </a>
+            <a class="tile" href="{% url 'publications:publication_list' %}">
+                <div>Publicações</div>
+                <div class="count">{{ publication_count }}</div>
+            </a>
+            <a class="tile secondary" href="/admin/">
+                <div>Admin</div>
+                <div class="count">Acesso</div>
+            </a>
+        </div>
+    </div>
+</body>
+</html>

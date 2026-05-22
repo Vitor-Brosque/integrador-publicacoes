@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <title>Revisar post #{{ post.id }}</title>
+
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -20,7 +21,9 @@
             margin-bottom: 20px;
         }
 
-        h1, h2, h3 {
+        h1,
+        h2,
+        h3 {
             margin-top: 0;
         }
 
@@ -112,6 +115,32 @@
             background: #92400e;
         }
 
+        input,
+        textarea {
+            width: 100%;
+            box-sizing: border-box;
+            padding: 10px;
+            border: 1px solid #d1d5db;
+            border-radius: 8px;
+            font-size: 14px;
+            margin-bottom: 12px;
+            font-family: Arial, sans-serif;
+        }
+
+        input[readonly],
+        textarea[readonly] {
+            background: #f3f4f6;
+            color: #555;
+            cursor: not-allowed;
+        }
+
+        label {
+            font-weight: bold;
+            display: block;
+            margin-bottom: 6px;
+            margin-top: 12px;
+        }
+
         pre {
             white-space: pre-wrap;
             background: #f3f4f6;
@@ -135,9 +164,19 @@
         .status-published {
             color: #166534;
         }
+
+        .status-failed {
+            color: #b91c1c;
+        }
+
+        .url-text {
+            word-break: break-all;
+        }
     </style>
 </head>
+
 <body>
+    {% include "core/navigation.html" %}
     <div class="messages">
         {% for message in messages %}
             <div class="message">{{ message }}</div>
@@ -196,7 +235,7 @@
                             MediaAsset #{{ item.media_asset.id }}
                         </p>
 
-                        <p class="muted">
+                        <p class="muted url-text">
                             {{ item.media_asset.public_url }}
                         </p>
                     </div>
@@ -207,42 +246,104 @@
         {% endif %}
     </div>
 
-    <div class="card">
-        <h2>Texto base</h2>
+    <form method="post" action="{% url 'posts:save_review_post' post.id %}">
+        {% csrf_token %}
 
-        <p><strong>Título:</strong> {{ post.base_title }}</p>
+        <div class="card">
+            <h2>Texto base</h2>
 
-        <p><strong>Legenda:</strong></p>
-        <pre>{{ post.base_caption }}</pre>
+            {% if post.review.status == "approved" %}
+                <p class="muted">
+                    Este post já foi aprovado. Para evitar divergência entre revisão e publicação, os textos ficam bloqueados.
+                </p>
+            {% endif %}
 
-        <p><strong>CTA:</strong> {{ post.cta }}</p>
+            <label for="base_title">Título base</label>
+            <input
+                id="base_title"
+                type="text"
+                name="base_title"
+                value="{{ post.base_title }}"
+                {% if post.review.status == "approved" %}readonly{% endif %}
+            >
 
-        <p><strong>Hashtags:</strong></p>
-        <pre>{{ post.hashtags }}</pre>
-    </div>
+            <label for="base_caption">Legenda base</label>
+            <textarea
+                id="base_caption"
+                name="base_caption"
+                rows="6"
+                {% if post.review.status == "approved" %}readonly{% endif %}
+            >{{ post.base_caption }}</textarea>
 
-    <div class="card">
-        <h2>Textos por plataforma</h2>
+            <label for="cta">CTA</label>
+            <input
+                id="cta"
+                type="text"
+                name="cta"
+                value="{{ post.cta }}"
+                {% if post.review.status == "approved" %}readonly{% endif %}
+            >
 
-        {% for platform_post in post.platform_posts.all %}
-            <div class="platform-card">
-                <h3>{{ platform_post.get_platform_display }}</h3>
+            <label for="hashtags">Hashtags</label>
+            <textarea
+                id="hashtags"
+                name="hashtags"
+                rows="3"
+                {% if post.review.status == "approved" %}readonly{% endif %}
+            >{{ post.hashtags }}</textarea>
+        </div>
 
-                <p><strong>Título:</strong> {{ platform_post.title }}</p>
+        <div class="card">
+            <h2>Textos por plataforma</h2>
 
-                <p><strong>Legenda:</strong></p>
-                <pre>{{ platform_post.caption }}</pre>
+            {% for platform_post in post.platform_posts.all %}
+                <div class="platform-card">
+                    <h3>{{ platform_post.get_platform_display }}</h3>
 
-                <p><strong>Descrição:</strong></p>
-                <pre>{{ platform_post.description }}</pre>
+                    <label for="platform_{{ platform_post.id }}_title">Título</label>
+                    <input
+                        id="platform_{{ platform_post.id }}_title"
+                        type="text"
+                        name="platform_{{ platform_post.id }}_title"
+                        value="{{ platform_post.title }}"
+                        {% if post.review.status == "approved" %}readonly{% endif %}
+                    >
 
-                <p><strong>Hashtags:</strong></p>
-                <pre>{{ platform_post.hashtags }}</pre>
+                    <label for="platform_{{ platform_post.id }}_caption">Legenda</label>
+                    <textarea
+                        id="platform_{{ platform_post.id }}_caption"
+                        name="platform_{{ platform_post.id }}_caption"
+                        rows="6"
+                        {% if post.review.status == "approved" %}readonly{% endif %}
+                    >{{ platform_post.caption }}</textarea>
+
+                    <label for="platform_{{ platform_post.id }}_description">Descrição</label>
+                    <textarea
+                        id="platform_{{ platform_post.id }}_description"
+                        name="platform_{{ platform_post.id }}_description"
+                        rows="6"
+                        {% if post.review.status == "approved" %}readonly{% endif %}
+                    >{{ platform_post.description }}</textarea>
+
+                    <label for="platform_{{ platform_post.id }}_hashtags">Hashtags</label>
+                    <textarea
+                        id="platform_{{ platform_post.id }}_hashtags"
+                        name="platform_{{ platform_post.id }}_hashtags"
+                        rows="3"
+                        {% if post.review.status == "approved" %}readonly{% endif %}
+                    >{{ platform_post.hashtags }}</textarea>
+                </div>
+            {% empty %}
+                <p>Nenhum texto por plataforma foi gerado.</p>
+            {% endfor %}
+        </div>
+
+        {% if post.review.status != "approved" %}
+            <div class="card">
+                <button type="submit">Salvar alterações de texto</button>
             </div>
-        {% empty %}
-            <p>Nenhum texto por plataforma foi gerado.</p>
-        {% endfor %}
-    </div>
+        {% endif %}
+    </form>
 
     <div class="card">
         <h2>Publicações</h2>
@@ -259,14 +360,22 @@
                         </span>
                     </p>
 
-                    <p><strong>Conta social:</strong> {{ publication.social_account|default:"Nenhuma conta vinculada" }}</p>
+                    <p>
+                        <strong>Conta social:</strong>
+                        {{ publication.social_account|default:"Nenhuma conta vinculada" }}
+                    </p>
 
-                    <p><strong>External post ID:</strong> {{ publication.external_post_id }}</p>
+                    <p>
+                        <strong>External post ID:</strong>
+                        {{ publication.external_post_id|default:"-" }}
+                    </p>
 
                     <p>
                         <strong>External URL:</strong>
                         {% if publication.external_url %}
-                            <a href="{{ publication.external_url }}" target="_blank">{{ publication.external_url }}</a>
+                            <a href="{{ publication.external_url }}" target="_blank">
+                                {{ publication.external_url }}
+                            </a>
                         {% else %}
                             -
                         {% endif %}
@@ -299,6 +408,20 @@
                     {% csrf_token %}
                     <button type="submit" class="warning">Publicar fake</button>
                 </form>
+
+                {% if has_pending_instagram_publication %}
+                    <form method="post" action="{% url 'posts:publish_instagram_real' post.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Publicar real Instagram</button>
+                    </form>
+                {% endif %}
+
+                {% if publications %}
+                    <form method="post" action="{% url 'posts:publish_all_real' post.id %}">
+                        {% csrf_token %}
+                        <button type="submit">Publicar real todas as plataformas</button>
+                    </form>
+                {% endif %}
             {% endif %}
         </div>
     </div>

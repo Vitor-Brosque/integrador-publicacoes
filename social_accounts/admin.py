@@ -9,13 +9,18 @@ class SocialAccountAdmin(admin.ModelAdmin):
         "id",
         "platform",
         "account_name",
+        "external_account_id",
+        "page_id",
+        "metadata",
         "status",
+        "access_token",
         "connected_at",
         "token_expires_at",
     )
     search_fields = (
         "account_name",
         "external_account_id",
+        "page_id",
     )
     list_filter = (
         "platform",

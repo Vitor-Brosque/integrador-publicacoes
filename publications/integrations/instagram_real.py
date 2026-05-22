@@ -1,0 +1,2 @@
+from publications.integrations.real_publishers.instagram import InstagramRealPublisher
+

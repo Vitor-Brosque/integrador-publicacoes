@@ -1,0 +1,6 @@
+from publications.integrations.real_publishers.facebook import FacebookRealPublisher
+from publications.integrations.real_publishers.google_business import GoogleBusinessRealPublisher
+from publications.integrations.real_publishers.instagram import InstagramRealPublisher
+from publications.integrations.real_publishers.tiktok import TikTokRealPublisher
+from publications.integrations.real_publishers.youtube import YouTubeRealPublisher
+

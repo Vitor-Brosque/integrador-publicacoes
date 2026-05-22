@@ -113,6 +113,31 @@
             font-size: 14px;
         }
 
+        .help-box {
+            margin-top: 8px;
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 14px;
+        }
+
+        .platform-notes {
+            display: grid;
+            gap: 8px;
+            margin-top: 12px;
+            margin-bottom: 8px;
+        }
+
+        .platform-note {
+            padding: 10px 12px;
+            border-radius: 8px;
+            background: #f9fafb;
+            border: 1px solid #e5e7eb;
+            color: #374151;
+            font-size: 14px;
+        }
+
         .secondary {
             background: #e5e7eb;
             color: #111827;
@@ -124,9 +149,20 @@
             color: white;
             margin-left: 4px;
         }
+
+        .form-error {
+            display: none;
+            margin-top: 12px;
+            padding: 12px;
+            border-radius: 8px;
+            background: #fee2e2;
+            color: #991b1b;
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
+    {% include "core/navigation.html" %}
     <div class="card">
         <h1>Criar post de veículo existente</h1>
 
@@ -139,6 +175,7 @@
             {{ form.media_asset_ids }}
             <label for="{{ form.post_type.id_for_label }}">Tipo de post</label>
             {{ form.post_type }}
+            <div id="post-type-help" class="help-box"></div>
 
             <label>Mídias do veículo</label>
             <div class="hint">Clique nas mídias que entram nesse post. Depois organize a ordem abaixo.</div>
@@ -152,6 +189,8 @@
             <div class="platforms">
                 {{ form.platforms }}
             </div>
+            <div id="platform-notes" class="platform-notes"></div>
+            <div id="form-error" class="form-error"></div>
 
             <button type="submit">Gerar post</button>
         </form>
@@ -159,9 +198,29 @@
 
     <script>
         const vehicleSelect = document.getElementById("{{ form.vehicle.id_for_label }}");
+        const postTypeSelect = document.getElementById("{{ form.post_type.id_for_label }}");
         const mediaAssetIdsInput = document.getElementById("{{ form.media_asset_ids.id_for_label }}");
         const mediaGrid = document.getElementById("media-grid");
         const selectedList = document.getElementById("selected-list");
+        const postTypeHelp = document.getElementById("post-type-help");
+        const platformNotes = document.getElementById("platform-notes");
+        const formError = document.getElementById("form-error");
+        const form = document.getElementById("create-post-form");
+        const platformInputs = Array.from(document.querySelectorAll('input[name="{{ form.platforms.html_name }}"]'));
+
+        const postTypeHelpTexts = {
+            single_image: "Foto única exige exatamente 1 imagem.",
+            carousel: "Carrossel exige de 2 a 10 imagens.",
+            video: "Vídeo exige exatamente 1 arquivo de vídeo."
+        };
+
+        const platformBaseNotes = {
+            instagram: "Instagram: permite single_image, carousel e video.",
+            facebook: "Facebook: permite single_image, carousel e video.",
+            tiktok: "TikTok: nesta versão, priorizar video.",
+            youtube: "YouTube: nesta versão, permitir apenas video.",
+            google_business: "Google Business: priorizar single_image; se carousel, a publicação real pode usar apenas a imagem principal."
+        };
 
         const vehiclesMedia = {
             {% for vehicle in vehicles %}
@@ -169,7 +228,7 @@
                     {% for media in vehicle.media_assets.all %}
                         {
                             id: "{{ media.id }}",
-                            fileUrl: "{% if media.public_url %}{{ media.public_url }}{% else %}{{ media.file.url }}{% endif %}",ileUrl: "{{ media.file.url }}",
+                            fileUrl: "{% if media.public_url %}{{ media.public_url }}{% else %}{{ media.file.url }}{% endif %}",
                             mediaType: "{{ media.media_type }}",
                             fileName: "{{ media.file.name|escapejs }}"
                         },
@@ -182,20 +241,59 @@
         let draggedIndex = null;
 
         vehicleSelect.addEventListener("change", () => {
-            selectedMedia = [];
+            clearSelectedMedia();
             renderMediaGrid();
             renderSelectedList();
             syncSelectedIds();
+        });
+
+        postTypeSelect.addEventListener("change", () => {
+            clearSelectedMedia();
+            renderMediaGrid();
+            renderSelectedList();
+            syncSelectedIds();
+            updateGuidance();
+        });
+
+        form.addEventListener("submit", (event) => {
+            const validationError = validateSelection();
+            if (validationError) {
+                event.preventDefault();
+                showFormError(validationError);
+            } else {
+                hideFormError();
+            }
         });
 
         function getCurrentVehicleMedia() {
             return vehiclesMedia[vehicleSelect.value] || [];
         }
 
+        function getAllowedMediaTypes() {
+            if (postTypeSelect.value === "video") {
+                return ["video"];
+            }
+
+            return ["image"];
+        }
+
+        function clearSelectedMedia() {
+            selectedMedia = [];
+        }
+
         function renderMediaGrid() {
             mediaGrid.innerHTML = "";
 
-            const mediaItems = getCurrentVehicleMedia();
+            const allowedTypes = getAllowedMediaTypes();
+            const mediaItems = getCurrentVehicleMedia().filter((media) => allowedTypes.includes(media.mediaType));
+
+            if (mediaItems.length === 0) {
+                const emptyState = document.createElement("div");
+                emptyState.className = "hint";
+                emptyState.textContent = "Nenhuma mídia compatível com o tipo de post selecionado.";
+                mediaGrid.appendChild(emptyState);
+                return;
+            }
 
             mediaItems.forEach((media) => {
                 const card = document.createElement("div");
@@ -235,6 +333,14 @@
 
         function renderSelectedList() {
             selectedList.innerHTML = "";
+
+            if (selectedMedia.length === 0) {
+                const emptyState = document.createElement("div");
+                emptyState.className = "hint";
+                emptyState.textContent = "Selecione as mídias compatíveis com o tipo de post.";
+                selectedList.appendChild(emptyState);
+                return;
+            }
 
             selectedMedia.forEach((media, index) => {
                 const item = document.createElement("div");
@@ -329,7 +435,103 @@
             mediaAssetIdsInput.value = selectedMedia.map((media) => media.id).join(",");
         }
 
+        function validateSelection() {
+            const type = postTypeSelect.value;
+            const selectedCount = selectedMedia.length;
+
+            if (type === "single_image") {
+                if (selectedCount !== 1) {
+                    return "Foto única exige exatamente 1 imagem.";
+                }
+
+                if (selectedMedia[0].mediaType !== "image") {
+                    return "Foto única aceita apenas imagem.";
+                }
+            }
+
+            if (type === "carousel") {
+                if (selectedCount < 2 || selectedCount > 10) {
+                    return "Carrossel exige de 2 a 10 imagens.";
+                }
+
+                const hasInvalidMedia = selectedMedia.some((media) => media.mediaType !== "image");
+                if (hasInvalidMedia) {
+                    return "Carrossel aceita apenas imagens.";
+                }
+            }
+
+            if (type === "video") {
+                if (selectedCount !== 1) {
+                    return "Vídeo exige exatamente 1 arquivo de vídeo.";
+                }
+
+                if (selectedMedia[0].mediaType !== "video") {
+                    return "Vídeo aceita apenas arquivo de vídeo.";
+                }
+            }
+
+            const selectedPlatforms = platformInputs.filter((input) => input.checked).map((input) => input.value);
+            if (type !== "video" && selectedPlatforms.includes("youtube")) {
+                return "YouTube nesta versão aceita apenas posts em vídeo.";
+            }
+            if (type !== "video" && selectedPlatforms.includes("tiktok")) {
+                return "TikTok nesta versão aceita apenas posts em vídeo.";
+            }
+
+            return "";
+        }
+
+        function updateGuidance() {
+            postTypeHelp.textContent = postTypeHelpTexts[postTypeSelect.value] || "";
+
+            platformNotes.innerHTML = "";
+            Object.entries(platformBaseNotes).forEach(([platform, note]) => {
+                const box = document.createElement("div");
+                box.className = "platform-note";
+                let finalNote = note;
+
+                if (platform === "youtube") {
+                    finalNote = postTypeSelect.value === "video"
+                        ? "YouTube: permitido nesta etapa porque o post é vídeo."
+                        : "YouTube: bloqueado nesta etapa porque só aceita vídeo.";
+                }
+
+                if (platform === "tiktok") {
+                    finalNote = postTypeSelect.value === "video"
+                        ? "TikTok: permitido nesta etapa porque o post é vídeo."
+                        : "TikTok: bloqueado nesta etapa porque só aceita vídeo.";
+                }
+
+                box.textContent = finalNote;
+                platformNotes.appendChild(box);
+            });
+
+            platformInputs.forEach((input) => {
+                if (input.value === "youtube" || input.value === "tiktok") {
+                    input.disabled = postTypeSelect.value !== "video";
+                    if (input.disabled) {
+                        input.checked = false;
+                    }
+                } else {
+                    input.disabled = false;
+                }
+            });
+        }
+
+        function showFormError(message) {
+            formError.textContent = message;
+            formError.style.display = "block";
+        }
+
+        function hideFormError() {
+            formError.textContent = "";
+            formError.style.display = "none";
+        }
+
+        updateGuidance();
         renderMediaGrid();
+        renderSelectedList();
+        syncSelectedIds();
     </script>
 </body>
 </html>

@@ -1,11 +1,13 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from unittest.mock import patch
 
 from media_library.models import MediaAsset
 from posts.services.post_pipeline import run_post_pipeline
 from publications.integrations.payloads.dispatcher import build_publication_payload
 from publications.services.publication_creator import create_publication_targets
 from publications.services.publisher import publish_to_platform
+from publications.services.real_publisher import publish_to_real_platform
 from social_accounts.models import SocialAccount
 from vehicles.models import Vehicle
 
@@ -327,3 +329,28 @@ class PublicationPublisherTest(TestCase):
         self.assertTrue(tiktok_publication.external_url.startswith("https://fake.tiktok/"))
         self.assertTrue(google_publication.external_url.startswith("https://fake.google-business/"))
         self.assertTrue(youtube_publication.external_url.startswith("https://fake.youtube/"))
+
+    @patch("publications.services.real_publisher.InstagramRealPublisher")
+    def test_publish_to_real_platform_dispatches_instagram(self, instagram_publisher_class):
+        vehicle = self.create_vehicle()
+        self.create_image_media(
+            vehicle=vehicle,
+            name="gol_frente.jpg",
+            content=b"fake image content",
+            public_url="https://example.com/gol_frente.jpg",
+        )
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        self.approve_post(post)
+        self.create_instagram_account()
+
+        publication = create_publication_targets(post)[0]
+
+        instagram_publisher = instagram_publisher_class.return_value
+        instagram_publisher.publish.return_value = publication
+
+        result = publish_to_real_platform(publication)
+
+        self.assertEqual(result, publication)
+        instagram_publisher_class.assert_called_once()
+        instagram_publisher.publish.assert_called_once_with(publication)

@@ -4,6 +4,7 @@ charset-normalizer==3.4.7
 Django==6.0.4
 idna==3.13
 jmespath==1.1.0
+openai>=1.0.0,<2.0.0
 pillow==12.2.0
 psycopg==3.3.3
 psycopg-binary==3.3.3

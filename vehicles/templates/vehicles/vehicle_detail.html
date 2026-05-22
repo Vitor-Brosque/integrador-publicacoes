@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Veículo #{{ vehicle.id }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background: #f5f5f5;
+        }
+        .card {
+            background: white;
+            padding: 24px;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            margin-bottom: 20px;
+        }
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 14px;
+        }
+        .media-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 10px;
+            background: #fafafa;
+        }
+        .media-card img,
+        .media-card video {
+            width: 100%;
+            height: 140px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #ddd;
+        }
+        .button-link {
+            display: inline-block;
+            padding: 8px 12px;
+            border-radius: 8px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+            margin-right: 6px;
+        }
+        .button-link.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .button-link.danger {
+            background: #b91c1c;
+        }
+        .post-card {
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 16px;
+            margin-bottom: 12px;
+            background: #fafafa;
+        }
+        .muted { color: #6b7280; }
+        pre {
+            white-space: pre-wrap;
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>{{ vehicle }}</h1>
+        <p class="muted">Veículo #{{ vehicle.id }}</p>
+        <div style="margin-top: 12px;">
+            <a class="button-link" href="{% url 'posts:create_post_from_vehicle' %}?vehicle_id={{ vehicle.id }}">Criar publicação para este veículo</a>
+            <a class="button-link secondary" href="{% url 'vehicles:vehicle_edit' vehicle.id %}">Editar veículo</a>
+            <a class="button-link secondary" href="{% url 'vehicles:vehicle_add_media' vehicle.id %}">Adicionar mídias</a>
+            <a class="button-link secondary" href="/admin/vehicles/vehicle/{{ vehicle.id }}/change/">Abrir no admin</a>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Raw input</h2>
+        <pre>{{ vehicle.raw_input }}</pre>
+    </div>
+
+    <div class="card">
+        <h2>Mídias</h2>
+        <div class="media-grid">
+            {% for media in vehicle.media_assets.all %}
+                <div class="media-card">
+                    {% if media.media_type == "video" %}
+                        <video controls src="{{ media.public_url|default:media.file.url }}"></video>
+                    {% else %}
+                        <img src="{{ media.public_url|default:media.file.url }}" alt="{{ media.file.name }}">
+                    {% endif %}
+                    <p class="muted">{{ media.get_media_type_display }}</p>
+                    <p class="muted">{{ media.file.name }}</p>
+                    <form method="post" action="{% url 'vehicles:vehicle_delete_media' vehicle.id media.id %}">
+                        {% csrf_token %}
+                        <button type="submit" class="button-link danger" style="width:100%;">Remover</button>
+                    </form>
+                </div>
+            {% empty %}
+                <p>Nenhuma mídia cadastrada para este veículo.</p>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Posts do veículo</h2>
+        {% for post in vehicle.social_posts.all %}
+            <div class="post-card">
+                <strong>Post #{{ post.id }}</strong> - {{ post.get_post_type_display }}
+                <p>Status da revisão: {{ post.review.get_status_display }}</p>
+                <p>
+                    Plataformas:
+                    {% for platform_post in post.platform_posts.all %}
+                        {{ platform_post.get_platform_display }}{% if not forloop.last %}, {% endif %}
+                    {% empty %}
+                        Nenhuma
+                    {% endfor %}
+                </p>
+                <a class="button-link secondary" href="{% url 'posts:review_post' post.id %}">Abrir revisão</a>
+            </div>
+        {% empty %}
+            <p>Nenhum post criado para este veículo.</p>
+        {% endfor %}
+    </div>
+</body>
+</html>
