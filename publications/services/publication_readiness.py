@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from publications.models import PublicationTarget
 from social_accounts.models import SocialAccountStatus
 from publications.services.real_publishability import get_real_publishability
@@ -68,11 +70,12 @@ def _build_publication_target_readiness(publication_target, review_approved):
             messages.append("Token de acesso não configurado.")
             status = "blocked"
 
-        if not _has_text(social_account.external_account_id):
+        if platform != "youtube" and not _has_text(social_account.external_account_id):
             messages.append("external_account_id não configurado.")
             status = "blocked"
 
     media_messages, media_status = _validate_media_for_post(
+        platform=platform,
         social_post=social_post,
         post_type=social_post.post_type,
     )
@@ -105,12 +108,25 @@ def _build_publication_target_readiness(publication_target, review_approved):
     }
 
 
-def _validate_media_for_post(social_post, post_type):
+def _validate_media_for_post(platform, social_post, post_type):
     media_items = list(social_post.post_media.select_related("media_asset").order_by("order", "id"))
     messages = []
 
     if not media_items:
         return ["Nenhuma mídia vinculada ao post."], "blocked"
+
+    if platform == "youtube" and post_type == "video":
+        if len(media_items) != 1:
+            return ["YouTube video precisa ter exatamente 1 mídia."], "blocked"
+
+        media_asset = media_items[0].media_asset
+        if media_asset.media_type != "video":
+            return ["YouTube video precisa usar uma mídia do tipo video."], "blocked"
+
+        if not _has_text(media_asset.public_url) and not _has_local_media_file(media_asset):
+            return ["YouTube video precisa de arquivo local ou public_url disponível."], "blocked"
+
+        return [], "ready"
 
     if post_type == "single_image":
         if len(media_items) != 1:
@@ -154,6 +170,19 @@ def _validate_media_for_post(social_post, post_type):
     return [f"Tipo de post não suportado para prontidão: {post_type}."], "blocked"
 
 
+def _has_local_media_file(media_asset):
+    file_field = getattr(media_asset, "file", None)
+    if not file_field:
+        return False
+
+    try:
+        path = file_field.path
+    except (AttributeError, OSError, ValueError, NotImplementedError):
+        return False
+
+    return bool(path and Path(path).exists())
+
+
 def _validate_platform_format(platform, post_type):
     if platform == "instagram":
         if post_type in {"single_image", "carousel", "video"}:
@@ -187,9 +216,9 @@ def _validate_platform_format(platform, post_type):
         return "blocked", ["Tipo de post não suportado para Google Business nesta versão."]
 
     if platform == "youtube":
-        if post_type != "video":
-            return "blocked", ["YouTube aceita apenas vídeo neste fluxo."]
-        return "warning", ["YouTube exige OAuth e upload via videos.insert."]
+        if post_type == "video":
+            return "ready", []
+        return "blocked", ["YouTube aceita apenas vídeo neste fluxo."]
 
     if platform == "tiktok":
         if post_type != "video":

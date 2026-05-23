@@ -33,8 +33,10 @@ def get_real_publishability(platform: str, post_type: str) -> tuple[str, list[st
         ]
 
     if platform == "youtube":
+        if post_type == "video":
+            return "ready", []
         return "blocked", [
-            "YouTube requer OAuth e upload via videos.insert; publisher real ainda não está ativo.",
+            "YouTube real publishing only supports video.",
         ]
 
     if platform == "tiktok":

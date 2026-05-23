@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from publications.models import PublicationTarget
 from publications.services.real_publishability import get_real_publishability
 
@@ -119,8 +121,7 @@ def _validate_platform_identifier(platform, social_account):
             return "Location resource name não configurado em external_account_id."
 
     if platform == "youtube":
-        if not (social_account.external_account_id or "").strip():
-            return "Channel ID/OAuth não configurado."
+        return ""
 
     if platform == "tiktok":
         if not (social_account.external_account_id or "").strip():
@@ -135,6 +136,19 @@ def _validate_media_for_post(platform, post_type, media_items):
 
     if not media_items:
         return ["Nenhuma mídia vinculada ao post."], True
+
+    if platform == "youtube" and post_type == "video":
+        if len(media_items) != 1:
+            return ["YouTube video precisa ter exatamente 1 mídia."], True
+
+        media_asset = media_items[0].media_asset
+        if media_asset.media_type != "video":
+            return ["YouTube video precisa usar uma mídia do tipo video."], True
+
+        if not _has_text(getattr(media_asset, "public_url", "")) and not _has_local_media_file(media_asset):
+            return ["YouTube video precisa de arquivo local ou public_url disponível."], True
+
+        return [], False
 
     missing_public_url = [
         item
@@ -190,9 +204,9 @@ def _validate_platform_format(platform, post_type):
         return "blocked", ["Tipo de post não suportado para Google Business nesta versão."]
 
     if platform == "youtube":
-        if post_type != "video":
-            return "blocked", ["YouTube aceita apenas vídeo nesta versão."]
-        return "warning", ["YouTube requer OAuth e upload via videos.insert; verifique se o publisher real está habilitado."]
+        if post_type == "video":
+            return "ready", []
+        return "blocked", ["YouTube aceita apenas vídeo nesta versão."]
 
     if platform == "tiktok":
         if post_type != "video":
@@ -208,3 +222,16 @@ def _unique_messages(messages):
         if message and message not in unique:
             unique.append(message)
     return unique
+
+
+def _has_local_media_file(media_asset):
+    file_field = getattr(media_asset, "file", None)
+    if not file_field:
+        return False
+
+    try:
+        path = file_field.path
+    except (AttributeError, OSError, ValueError, NotImplementedError):
+        return False
+
+    return bool(path and Path(path).exists())

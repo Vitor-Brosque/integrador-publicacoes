@@ -2,6 +2,8 @@ asgiref==3.11.1
 certifi==2026.4.22
 charset-normalizer==3.4.7
 Django==6.0.4
+google-api-python-client
+google-auth
 idna==3.13
 jmespath==1.1.0
 openai>=1.0.0,<2.0.0

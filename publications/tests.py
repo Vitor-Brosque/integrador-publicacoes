@@ -3,7 +3,7 @@ import json
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from media_library.models import MediaAsset
 from posts.services.post_pipeline import run_post_pipeline
@@ -650,6 +650,21 @@ class PublicationReadinessTest(TestCase):
         self.assertEqual(item["status"], "blocked")
         self.assertIn("YouTube aceita apenas vídeo neste fluxo.", item["messages"])
 
+    def test_youtube_video_com_token_e_midia_valida_retorna_ready(self):
+        post = self.get_post_with_targets(["youtube"], post_type="video", approved=True)
+        self.create_connected_account(
+            "youtube",
+            external_account_id="channel-123",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "youtube")
+
+        self.assertEqual(item["status"], "ready")
+        self.assertEqual(item["messages"], [])
+
     def test_google_business_video_retorna_blocked(self):
         post = self.get_post_with_targets(["google_business"], post_type="video", approved=True)
         self.create_connected_account(
@@ -880,7 +895,7 @@ class RealPublisherReadinessAuditTest(TestCase):
             item["messages"],
         )
 
-    def test_youtube_video_is_blocked_when_publisher_not_active(self):
+    def test_youtube_video_is_ready_when_publisher_active(self):
         post = self.create_post("youtube", "video")
         self.create_account(
             "youtube",
@@ -892,8 +907,8 @@ class RealPublisherReadinessAuditTest(TestCase):
         readiness = get_post_publication_readiness(post)
         item = readiness[0]
 
-        self.assertEqual(item["status"], "blocked")
-        self.assertIn("publisher real ainda não está ativo", " ".join(item["messages"]))
+        self.assertEqual(item["status"], "ready")
+        self.assertEqual(item["messages"], [])
 
     def test_tiktok_video_is_blocked_when_publisher_not_active(self):
         post = self.create_post("tiktok", "video")
@@ -1040,6 +1055,17 @@ class PublicationPayloadPreviewTest(TestCase):
 
         self.assertIn("YouTube aceita apenas video neste fluxo.", preview["warnings"])
         self.assertIn("snippet", preview["payload"])
+
+    def test_youtube_video_preview_shows_videos_insert_and_media_source(self):
+        publication = self.create_publication("youtube", "video", with_video=True)
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["operation"], "videos.insert")
+        self.assertEqual(preview["payload"]["part"], "snippet,status")
+        self.assertEqual(preview["payload"]["status"]["privacyStatus"], "private")
+        self.assertIn(preview["payload"]["media_source"]["source_type"], {"local_file", "public_url_download"})
+        self.assertNotIn("access_token", json.dumps(preview))
 
 
 class FacebookRealPublisherTest(TestCase):
@@ -1336,3 +1362,185 @@ class GoogleBusinessRealPublisherTest(TestCase):
             mocked_post.call_args.kwargs["json"]["media"][0]["sourceUrl"],
             "https://example.com/gol_frente.jpg",
         )
+
+
+class YouTubeRealPublisherTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_youtube_account(self, **kwargs):
+        defaults = {
+            "platform": "youtube",
+            "account_name": "YouTube Rodoviária",
+            "status": "connected",
+            "external_account_id": "channel-123",
+            "access_token": "youtube-token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_approved_post(self, post_type="video", public_url="https://example.com/gol_video.mp4"):
+        vehicle = self.create_vehicle()
+        self.create_video_media(vehicle, public_url=public_url)
+
+        post = run_post_pipeline(vehicle, platforms=["youtube"], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        return post
+
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_service")
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_media_upload")
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_credentials")
+    def test_youtube_video_success_marks_publication_as_published(
+        self,
+        mocked_credentials,
+        mocked_media_upload,
+        mocked_service_builder,
+    ):
+        post = self.create_approved_post(post_type="video")
+        self.create_youtube_account()
+        publication = create_publication_targets(post)[0]
+
+        mocked_credentials.return_value = Mock(name="credentials")
+        mocked_media_upload.return_value = Mock(name="media_upload")
+        execute_mock = Mock(return_value={"id": "yt-video-123"})
+        insert_mock = Mock(execute=execute_mock)
+        videos_mock = Mock(insert=Mock(return_value=insert_mock))
+        service_mock = Mock(videos=Mock(return_value=videos_mock))
+        mocked_service_builder.return_value = service_mock
+
+        result = publish_to_real_platform(publication)
+
+        self.assertEqual(result.status, "published")
+        self.assertEqual(result.external_post_id, "yt-video-123")
+        self.assertEqual(result.external_url, "https://www.youtube.com/watch?v=yt-video-123")
+        self.assertEqual(result.error_message, "")
+        mocked_service_builder.assert_called_once()
+        mocked_media_upload.assert_called_once()
+        self.assertEqual(
+            videos_mock.insert.call_args.kwargs["part"],
+            "snippet,status",
+        )
+        self.assertEqual(
+            videos_mock.insert.call_args.kwargs["body"]["status"]["privacyStatus"],
+            "private",
+        )
+
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_service")
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_media_upload")
+    @patch("publications.integrations.real_publishers.youtube.build_youtube_credentials")
+    def test_youtube_api_error_marks_failed(
+        self,
+        mocked_credentials,
+        mocked_media_upload,
+        mocked_service_builder,
+    ):
+        post = self.create_approved_post(post_type="video")
+        self.create_youtube_account()
+        publication = create_publication_targets(post)[0]
+
+        mocked_credentials.return_value = Mock(name="credentials")
+        mocked_media_upload.return_value = Mock(name="media_upload")
+        execute_mock = Mock(side_effect=RuntimeError("quotaExceeded"))
+        insert_mock = Mock(execute=execute_mock)
+        videos_mock = Mock(insert=Mock(return_value=insert_mock))
+        service_mock = Mock(videos=Mock(return_value=videos_mock))
+        mocked_service_builder.return_value = service_mock
+
+        with self.assertRaises(RuntimeError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("quotaExceeded", publication.error_message)
+
+    def test_youtube_single_image_remains_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, public_url="https://example.com/gol_frente.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["youtube"], post_type="single_image")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_youtube_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("only supports video", publication.error_message)
+
+    def test_youtube_carousel_remains_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_video_media(vehicle)
+        self.create_video_media(vehicle, public_url="https://example.com/another.mp4")
+
+        post = run_post_pipeline(vehicle, platforms=["youtube"], post_type="carousel")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_youtube_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("only supports video", publication.error_message)
+
+    def test_youtube_without_token_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="video")
+        self.create_youtube_account(access_token="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("access token", publication.error_message)
+
+    def test_youtube_video_without_media_source_fails(self):
+        vehicle = self.create_vehicle()
+        media = self.create_video_media(vehicle, public_url="https://example.com/gol_video.mp4")
+        media.public_url = ""
+        media.file.delete(save=False)
+        media.save(update_fields=["public_url"])
+
+        post = run_post_pipeline(vehicle, platforms=["youtube"], post_type="video")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_youtube_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("arquivo local ou public_url", publication.error_message)

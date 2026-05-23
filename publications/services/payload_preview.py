@@ -133,6 +133,7 @@ def _build_platform_payload_preview(
     if platform == "youtube":
         payload, platform_warnings = _build_youtube_payload_preview(
             post_type=post_type,
+            social_post=social_post,
             media=media,
             text=text,
         )
@@ -297,30 +298,53 @@ def _build_google_business_payload_preview(post_type, social_account, platform_p
     return payload, warnings
 
 
-def _build_youtube_payload_preview(post_type, media, text):
+def _build_youtube_payload_preview(post_type, social_post, media, text):
     warnings = []
     payload = {
+        "operation": "videos.insert",
+        "part": "snippet,status",
         "snippet": {
             "title": text["title"],
             "description": build_text_with_hashtags(
                 text["description"] or text["caption"],
                 text["hashtags"],
             ),
+            "categoryId": "2",
         },
         "status": {
             "privacyStatus": "private",
         },
+        "media_source": {},
     }
 
     if post_type != "video":
         warnings.append("YouTube aceita apenas video neste fluxo.")
+        return payload, warnings
+
+    first_media = _first_media(media, expected_media_type="video")
+    if first_media.get("media_type") != "video":
+        warnings.append("YouTube video exige mídia do tipo video.")
+
+    media_item = social_post.post_media.select_related("media_asset").order_by("order", "id").first()
+    media_asset = media_item.media_asset if media_item else None
+    local_path = _get_local_media_path(media_asset) if media_asset else ""
+
+    if local_path:
+        payload["media_source"] = {
+            "source_type": "local_file",
+            "path": local_path,
+        }
+    elif first_media.get("public_url"):
+        payload["media_source"] = {
+            "source_type": "public_url_download",
+            "url": first_media.get("public_url", ""),
+        }
+        warnings.append("YouTube vai baixar o vídeo temporariamente antes do upload.")
     else:
-        first_media = _first_media(media, expected_media_type="video")
-        if first_media.get("media_type") != "video":
-            warnings.append("YouTube video exige mídia do tipo video.")
-        if not first_media.get("public_url"):
-            warnings.append("YouTube video precisa de url pública da mídia.")
-    warnings.append("YouTube exige upload via videos.insert.")
+        payload["media_source"] = {
+            "source_type": "missing",
+        }
+        warnings.append("YouTube video precisa de arquivo local ou public_url disponível.")
 
     return payload, warnings
 
@@ -376,6 +400,24 @@ def _first_media(media, expected_media_type=None):
             return item
 
     return media[0]
+
+
+def _get_local_media_path(media_asset):
+    if media_asset is None:
+        return ""
+
+    file_field = getattr(media_asset, "file", None)
+    if not file_field:
+        return ""
+
+    try:
+        path = file_field.path
+    except (AttributeError, OSError, ValueError, NotImplementedError):
+        return ""
+
+    if path and Path(path).exists():
+        return path
+    return ""
 
 
 def _unique_messages(messages):
