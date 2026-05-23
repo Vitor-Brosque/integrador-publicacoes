@@ -64,6 +64,12 @@ def _build_publication_target_diagnostic(publication_target):
             blocked = True
             messages.append(identifier_message)
 
+        if platform == "tiktok":
+            metadata_message = _validate_tiktok_metadata(social_account)
+            if metadata_message:
+                blocked = True
+                messages.append(metadata_message)
+
     media_items = list(social_post.post_media.select_related("media_asset").order_by("order"))
     media_messages, media_blocked = _validate_media_for_post(platform, social_post.post_type, media_items)
     messages.extend(media_messages)
@@ -209,9 +215,11 @@ def _validate_platform_format(platform, post_type):
         return "blocked", ["YouTube aceita apenas vídeo nesta versão."]
 
     if platform == "tiktok":
-        if post_type != "video":
-            return "blocked", ["TikTok nesta versão é priorizado para vídeo."]
-        return "warning", ["TikTok requer app/scopes Content Posting API configurados."]
+        if post_type == "video":
+            return "ready", []
+        return "blocked", [
+            "TikTok real publishing currently supports only video in this version.",
+        ]
 
     return "warning", []
 
@@ -235,3 +243,15 @@ def _has_local_media_file(media_asset):
         return False
 
     return bool(path and Path(path).exists())
+
+
+def _validate_tiktok_metadata(social_account):
+    metadata = social_account.metadata or {}
+    if not isinstance(metadata, dict):
+        return "TikTok metadata inválida."
+
+    source = str(metadata.get("source") or "").strip().upper()
+    if source != "PULL_FROM_URL":
+        return "TikTok metadata.source precisa ser PULL_FROM_URL."
+
+    return ""

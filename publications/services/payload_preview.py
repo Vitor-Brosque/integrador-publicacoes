@@ -143,6 +143,8 @@ def _build_platform_payload_preview(
     if platform == "tiktok":
         payload, platform_warnings = _build_tiktok_payload_preview(
             post_type=post_type,
+            social_account=social_account,
+            platform_post=platform_post,
             media=media,
             text=text,
         )
@@ -349,15 +351,21 @@ def _build_youtube_payload_preview(post_type, social_post, media, text):
     return payload, warnings
 
 
-def _build_tiktok_payload_preview(post_type, media, text):
+def _build_tiktok_payload_preview(post_type, social_account, platform_post, media, text):
     warnings = []
+    metadata = {}
+    if social_account is not None and isinstance(social_account.metadata, dict):
+        metadata = social_account.metadata
+
     payload = {
+        "endpoint": "/v2/post/publish/video/init/",
         "post_info": {
             "title": text["title"],
-            "description": build_text_with_hashtags(
-                text["caption"] or text["description"],
-                text["hashtags"],
-            ),
+            "privacy_level": str(metadata.get("privacy_level") or "SELF_ONLY").upper(),
+            "disable_duet": bool(metadata.get("disable_duet", False)),
+            "disable_comment": bool(metadata.get("disable_comment", False)),
+            "disable_stitch": bool(metadata.get("disable_stitch", False)),
+            "video_cover_timestamp_ms": _coerce_int(metadata.get("video_cover_timestamp_ms"), 1000),
         },
         "source_info": {
             "source": "PULL_FROM_URL",
@@ -371,19 +379,17 @@ def _build_tiktok_payload_preview(post_type, media, text):
                 "video_url": first_media.get("public_url", ""),
             }
         )
+        if metadata.get("post_mode"):
+            payload["post_info"]["post_mode"] = metadata.get("post_mode")
         if first_media.get("media_type") != "video":
             warnings.append("TikTok video exige mídia do tipo video.")
         if not first_media.get("public_url"):
             warnings.append("TikTok video precisa de video_url.")
+        if str(metadata.get("source") or "PULL_FROM_URL").strip().upper() != "PULL_FROM_URL":
+            warnings.append("TikTok metadata.source precisa ser PULL_FROM_URL.")
+        warnings.append("TikTok PULL_FROM_URL pode exigir domínio/prefixo verificado na app.")
     else:
-        warnings.append("TikTok aceita apenas video neste fluxo.")
-        payload["source_info"].update(
-            {
-                "photo_images": [item.get("public_url", "") for item in media if item.get("public_url")],
-            }
-        )
-
-    warnings.append("TikTok exige app/scopes/configuração correta no Content Posting API.")
+        warnings.append("TikTok real publishing currently supports only video in this version.")
 
     return payload, warnings
 
@@ -418,6 +424,15 @@ def _get_local_media_path(media_asset):
     if path and Path(path).exists():
         return path
     return ""
+
+
+def _coerce_int(value, default):
+    try:
+        if value in (None, ""):
+            return default
+        return int(value)
+    except (TypeError, ValueError):
+        return default
 
 
 def _unique_messages(messages):

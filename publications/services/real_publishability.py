@@ -40,8 +40,10 @@ def get_real_publishability(platform: str, post_type: str) -> tuple[str, list[st
         ]
 
     if platform == "tiktok":
+        if post_type == "video":
+            return "ready", []
         return "blocked", [
-            "TikTok requer app/scopes e fluxo de direct post; publisher real ainda não está ativo.",
+            "TikTok real publishing currently supports only video in this version.",
         ]
 
     return "blocked", [

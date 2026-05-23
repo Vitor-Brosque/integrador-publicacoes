@@ -910,7 +910,7 @@ class RealPublisherReadinessAuditTest(TestCase):
         self.assertEqual(item["status"], "ready")
         self.assertEqual(item["messages"], [])
 
-    def test_tiktok_video_is_blocked_when_publisher_not_active(self):
+    def test_tiktok_video_is_blocked_without_metadata_source(self):
         post = self.create_post("tiktok", "video")
         self.create_account(
             "tiktok",
@@ -923,7 +923,26 @@ class RealPublisherReadinessAuditTest(TestCase):
         item = readiness[0]
 
         self.assertEqual(item["status"], "blocked")
-        self.assertIn("publisher real ainda não está ativo", " ".join(item["messages"]))
+        self.assertIn("TikTok metadata.source precisa ser PULL_FROM_URL.", " ".join(item["messages"]))
+
+    def test_tiktok_video_is_ready_with_minimal_metadata(self):
+        post = self.create_post("tiktok", "video")
+        self.create_account(
+            "tiktok",
+            external_account_id="creator-123",
+            access_token="demo-token",
+            metadata={
+                "source": "PULL_FROM_URL",
+                "privacy_level": "SELF_ONLY",
+            },
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "ready")
+        self.assertEqual(item["messages"], [])
 
 
 class PublicationPayloadPreviewTest(TestCase):
@@ -1066,6 +1085,30 @@ class PublicationPayloadPreviewTest(TestCase):
         self.assertEqual(preview["payload"]["status"]["privacyStatus"], "private")
         self.assertIn(preview["payload"]["media_source"]["source_type"], {"local_file", "public_url_download"})
         self.assertNotIn("access_token", json.dumps(preview))
+
+    def test_tiktok_video_preview_shows_init_payload_and_source_info(self):
+        publication = self.create_publication(
+            "tiktok",
+            "video",
+            with_video=True,
+            extra_account_kwargs={
+                "external_account_id": "creator-123",
+                "metadata": {
+                    "source": "PULL_FROM_URL",
+                    "privacy_level": "SELF_ONLY",
+                    "post_mode": "DIRECT_POST",
+                },
+            },
+        )
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["endpoint"], "/v2/post/publish/video/init/")
+        self.assertEqual(preview["payload"]["source_info"]["source"], "PULL_FROM_URL")
+        self.assertEqual(preview["payload"]["source_info"]["video_url"], "https://example.com/gol_video.mp4")
+        self.assertEqual(preview["payload"]["post_info"]["privacy_level"], "SELF_ONLY")
+        self.assertNotIn("access_token", json.dumps(preview))
+        self.assertIn("PULL_FROM_URL", " ".join(preview["warnings"]))
 
 
 class FacebookRealPublisherTest(TestCase):
@@ -1493,7 +1536,7 @@ class YouTubeRealPublisherTest(TestCase):
 
         publication.refresh_from_db()
         self.assertEqual(publication.status, "failed")
-        self.assertIn("only supports video", publication.error_message)
+        self.assertIn("YouTube real publishing only supports video.", publication.error_message)
 
     def test_youtube_carousel_remains_blocked(self):
         vehicle = self.create_vehicle()
@@ -1511,7 +1554,7 @@ class YouTubeRealPublisherTest(TestCase):
 
         publication.refresh_from_db()
         self.assertEqual(publication.status, "failed")
-        self.assertIn("only supports video", publication.error_message)
+        self.assertIn("YouTube real publishing only supports video.", publication.error_message)
 
     def test_youtube_without_token_fails_with_useful_message(self):
         post = self.create_approved_post(post_type="video")
@@ -1544,3 +1587,189 @@ class YouTubeRealPublisherTest(TestCase):
         publication.refresh_from_db()
         self.assertEqual(publication.status, "failed")
         self.assertIn("arquivo local ou public_url", publication.error_message)
+
+
+class TikTokRealPublisherTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_tiktok_account(self, **kwargs):
+        defaults = {
+            "platform": "tiktok",
+            "account_name": "TikTok Rodoviária",
+            "status": "connected",
+            "external_account_id": "creator-123",
+            "access_token": "tiktok-token",
+            "metadata": {
+                "source": "PULL_FROM_URL",
+                "privacy_level": "SELF_ONLY",
+            },
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_approved_post(self, post_type="video", public_url="https://example.com/gol_video.mp4"):
+        vehicle = self.create_vehicle()
+        self.create_video_media(vehicle, public_url=public_url)
+
+        post = run_post_pipeline(vehicle, platforms=["tiktok"], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        return post
+
+    @patch("requests.Session.post")
+    def test_tiktok_video_success_marks_publication_pending_or_published(self, mocked_post):
+        post = self.create_approved_post(post_type="video")
+        self.create_tiktok_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 200
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "data": {
+                "publish_id": "tt-publish-123",
+                "status": "PROCESSING",
+            }
+        }
+        mocked_post.return_value = response_mock
+
+        result = publish_to_real_platform(publication)
+
+        self.assertIn(result.status, {"pending", "published"})
+        self.assertEqual(result.external_post_id, "tt-publish-123")
+        self.assertEqual(result.error_message, "")
+        self.assertEqual(
+            mocked_post.call_args.kwargs["headers"]["Authorization"],
+            "Bearer tiktok-token",
+        )
+        self.assertEqual(
+            mocked_post.call_args.kwargs["json"]["source_info"]["source"],
+            "PULL_FROM_URL",
+        )
+
+    @patch("requests.Session.post")
+    def test_tiktok_api_error_marks_failed(self, mocked_post):
+        post = self.create_approved_post(post_type="video")
+        self.create_tiktok_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 400
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "error": {
+                "message": "invalid_token",
+                "code": 401,
+            }
+        }
+        mocked_post.return_value = response_mock
+
+        with self.assertRaises(RuntimeError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("invalid_token", publication.error_message)
+
+    def test_tiktok_single_image_remains_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["tiktok"], post_type="single_image")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_tiktok_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("TikTok real publishing currently supports only video in this version.", publication.error_message)
+
+    def test_tiktok_carousel_remains_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+        self.create_image_media(vehicle, public_url="https://example.com/gol_lateral.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["tiktok"], post_type="carousel")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_tiktok_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("TikTok real publishing currently supports only video in this version.", publication.error_message)
+
+    def test_tiktok_without_token_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="video")
+        self.create_tiktok_account(access_token="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("access token", publication.error_message)
+
+    def test_tiktok_without_external_account_id_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="video")
+        self.create_tiktok_account(external_account_id="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("external_account_id", publication.error_message)
+
+    def test_tiktok_video_without_public_url_fails_with_useful_message(self):
+        vehicle = self.create_vehicle()
+        media = self.create_video_media(vehicle, public_url="https://example.com/gol_video.mp4")
+        media.public_url = ""
+        media.save(update_fields=["public_url"])
+
+        post = run_post_pipeline(vehicle, platforms=["tiktok"], post_type="video")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_tiktok_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("public_url", publication.error_message)

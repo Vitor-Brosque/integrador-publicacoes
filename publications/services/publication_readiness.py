@@ -70,9 +70,15 @@ def _build_publication_target_readiness(publication_target, review_approved):
             messages.append("Token de acesso não configurado.")
             status = "blocked"
 
-        if platform != "youtube" and not _has_text(social_account.external_account_id):
+        if platform not in {"youtube"} and not _has_text(social_account.external_account_id):
             messages.append("external_account_id não configurado.")
             status = "blocked"
+
+        if platform == "tiktok":
+            tiktok_message = _validate_tiktok_metadata(social_account)
+            if tiktok_message:
+                messages.append(tiktok_message)
+                status = "blocked"
 
     media_messages, media_status = _validate_media_for_post(
         platform=platform,
@@ -221,10 +227,10 @@ def _validate_platform_format(platform, post_type):
         return "blocked", ["YouTube aceita apenas vídeo neste fluxo."]
 
     if platform == "tiktok":
-        if post_type != "video":
-            return "blocked", ["TikTok nesta versão aceita apenas vídeo."]
-        return "warning", [
-            "TikTok exige app/scopes Content Posting API e configuração correta.",
+        if post_type == "video":
+            return "ready", []
+        return "blocked", [
+            "TikTok real publishing currently supports only video in this version.",
         ]
 
     return "warning", []
@@ -244,6 +250,18 @@ def _merge_status(current_status, new_status):
 
 def _has_text(value):
     return bool((value or "").strip())
+
+
+def _validate_tiktok_metadata(social_account):
+    metadata = social_account.metadata or {}
+    if not isinstance(metadata, dict):
+        return "TikTok metadata inválida."
+
+    source = str(metadata.get("source") or "").strip().upper()
+    if source != "PULL_FROM_URL":
+        return "TikTok metadata.source precisa ser PULL_FROM_URL."
+
+    return ""
 
 
 def _unique_messages(messages):
