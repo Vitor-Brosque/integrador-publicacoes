@@ -73,6 +73,7 @@
                         <td>{{ vehicle.created_at }}</td>
                         <td>
                             <a class="button-link secondary" href="{% url 'vehicles:vehicle_detail' vehicle.id %}">Abrir</a>
+                            <a class="button-link secondary" href="{% url 'vehicles:vehicle_edit' vehicle.id %}">Editar</a>
                             <a class="button-link" href="{% url 'posts:create_post_from_vehicle' %}?vehicle_id={{ vehicle.id }}">Criar publicação</a>
                         </td>
                     </tr>

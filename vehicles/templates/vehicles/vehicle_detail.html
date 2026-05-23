@@ -37,6 +37,11 @@
             border-radius: 8px;
             background: #ddd;
         }
+        .meta {
+            font-size: 14px;
+            color: #6b7280;
+            word-break: break-word;
+        }
         .button-link {
             display: inline-block;
             padding: 8px 12px;
@@ -97,8 +102,9 @@
                     {% else %}
                         <img src="{{ media.public_url|default:media.file.url }}" alt="{{ media.file.name }}">
                     {% endif %}
-                    <p class="muted">{{ media.get_media_type_display }}</p>
-                    <p class="muted">{{ media.file.name }}</p>
+                    <p class="meta"><strong>Tipo:</strong> {{ media.get_media_type_display }}</p>
+                    <p class="meta"><strong>Arquivo:</strong> {{ media.file.name }}</p>
+                    <p class="meta"><strong>Public URL:</strong> {{ media.public_url|default:"-" }}</p>
                     <form method="post" action="{% url 'vehicles:vehicle_delete_media' vehicle.id media.id %}">
                         {% csrf_token %}
                         <button type="submit" class="button-link danger" style="width:100%;">Remover</button>

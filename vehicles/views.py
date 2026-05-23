@@ -39,16 +39,20 @@ def vehicle_create(request):
             validation_error = validate_uploaded_media_files(uploaded_media_files)
             if validation_error:
                 form.add_error("media_files", validation_error)
+                messages.error(request, validation_error)
             else:
-                with transaction.atomic():
-                    vehicle = Vehicle.objects.create(
-                        raw_input=form.cleaned_data["raw_input"],
-                    )
+                try:
+                    with transaction.atomic():
+                        vehicle = Vehicle.objects.create(
+                            raw_input=form.cleaned_data["raw_input"],
+                        )
 
-                    create_media_assets_for_vehicle(vehicle, uploaded_media_files)
-
-                messages.success(request, f"Veículo #{vehicle.id} criado com sucesso.")
-                return redirect("vehicles:vehicle_detail", vehicle_id=vehicle.id)
+                        create_media_assets_for_vehicle(vehicle, uploaded_media_files)
+                except Exception as error:
+                    messages.error(request, f"Falha ao enviar mídia: {error}")
+                else:
+                    messages.success(request, f"Veículo #{vehicle.id} criado com sucesso.")
+                    return redirect("vehicles:vehicle_detail", vehicle_id=vehicle.id)
     else:
         form = VehicleCreateForm()
 
@@ -95,12 +99,16 @@ def vehicle_add_media(request, vehicle_id):
             validation_error = validate_uploaded_media_files(uploaded_media_files)
             if validation_error:
                 form.add_error("media_files", validation_error)
+                messages.error(request, validation_error)
             else:
-                with transaction.atomic():
-                    create_media_assets_for_vehicle(vehicle, uploaded_media_files)
-
-                messages.success(request, "Mídias adicionadas com sucesso.")
-                return redirect("vehicles:vehicle_detail", vehicle_id=vehicle.id)
+                try:
+                    with transaction.atomic():
+                        create_media_assets_for_vehicle(vehicle, uploaded_media_files)
+                except Exception as error:
+                    messages.error(request, f"Falha ao enviar mídia: {error}")
+                else:
+                    messages.success(request, "Mídias adicionadas com sucesso.")
+                    return redirect("vehicles:vehicle_detail", vehicle_id=vehicle.id)
     else:
         form = VehicleMediaUploadForm()
 
