@@ -57,6 +57,6 @@ def platform_integration(request, platform_slug):
             "account": account,
             "config": config,
             "form": form,
-            "token_state": "preenchido" if account and account.access_token else "vazio",
+            "token_state": "configurado" if account and account.access_token else "vazio",
         },
     )

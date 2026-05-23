@@ -103,6 +103,20 @@
             font-size: 14px;
             display: inline-block;
         }
+
+        .section-title {
+            margin: 18px 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #374151;
+        }
+
+        .compact-list {
+            padding-left: 18px;
+            margin: 8px 0 0;
+        }
     </style>
 </head>
 <body>
@@ -141,23 +155,31 @@
             <div class="status-box">
                 <h2>Status atual</h2>
                 <p><strong>Conta:</strong> {{ account.account_name|default:"Nenhuma conta configurada" }}</p>
-                <p><strong>Prontidão:</strong> {% if token_state == "preenchido" and account and account.status == "connected" and account.external_account_id %}pronto{% else %}incompleto{% endif %}</p>
+                <p><strong>Prontidão:</strong> {% if token_state == "configurado" and account and account.status == "connected" and account.external_account_id %}ready{% else %}incomplete{% endif %}</p>
                 <p><strong>Token atual:</strong> <span class="token-state">token {{ token_state }}</span></p>
+                <p><strong>Formato esperado:</strong> {{ config.external_account_id_format }}</p>
             </div>
 
             <div class="status-box" style="margin-top: 16px;">
                 <h2>Como configurar</h2>
-                <ul>
-                    <li><strong>Instagram:</strong> external_account_id = Instagram Business Account ID.</li>
-                    <li><strong>Instagram:</strong> access_token = token Meta com permissão para publicar.</li>
-                    <li><strong>Facebook:</strong> external_account_id = Facebook Page ID.</li>
-                    <li><strong>Facebook:</strong> access_token = Page Access Token.</li>
-                    <li><strong>Google Business:</strong> external_account_id = accounts/{accountId}/locations/{locationId}.</li>
-                    <li><strong>Google Business:</strong> access_token = OAuth com permissão para gerenciar a ficha.</li>
-                    <li><strong>YouTube:</strong> external_account_id = channel_id.</li>
-                    <li><strong>YouTube:</strong> access_token = OAuth com permissão de upload.</li>
-                    <li><strong>TikTok:</strong> external_account_id = open_id/creator id.</li>
-                    <li><strong>TikTok:</strong> access_token = TikTok user access token.</li>
+                <ul class="compact-list">
+                    {% for item in config.how_to_fill %}
+                        <li>{{ item }}</li>
+                    {% endfor %}
+                </ul>
+            </div>
+
+            <div class="status-box" style="margin-top: 16px;">
+                <h2>Próximo teste recomendado</h2>
+                <p>{{ config.next_test_recommended }}</p>
+            </div>
+
+            <div class="status-box" style="margin-top: 16px;">
+                <h2>Bloqueios comuns</h2>
+                <ul class="compact-list">
+                    {% for blocker in config.common_blockers %}
+                        <li>{{ blocker }}</li>
+                    {% endfor %}
                 </ul>
             </div>
         </aside>

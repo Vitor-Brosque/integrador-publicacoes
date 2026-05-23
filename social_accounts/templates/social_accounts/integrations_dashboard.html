@@ -81,6 +81,10 @@
             color: #fff;
             text-decoration: none;
         }
+
+        .subtle-list {
+            font-size: 14px;
+        }
     </style>
 </head>
 <body>
@@ -93,16 +97,18 @@
     <div class="grid">
         {% for card in cards %}
             <section class="integration-card">
-                <div class="pill {% if card.status_label == 'pronto' %}ready{% else %}pending{% endif %}">
+                <div class="pill {% if card.status_label == 'ready' %}ready{% else %}pending{% endif %}">
                     {{ card.status_label }}
                 </div>
                 <h2>{{ card.label }}</h2>
                 <p class="muted">{{ card.note }}</p>
                 <p><strong>Conta:</strong> {{ card.account_name }}</p>
+                <p><strong>Formato esperado:</strong> {{ card.external_account_id_format }}</p>
+                <p><strong>Documentação:</strong> {{ card.official_docs_text }}</p>
 
                 <div class="section-title">Campos preenchidos</div>
                 {% if card.fields_filled %}
-                    <ul>
+                    <ul class="subtle-list">
                         {% for field in card.fields_filled %}
                             <li>{{ field }}</li>
                         {% endfor %}
@@ -113,7 +119,7 @@
 
                 <div class="section-title">Campos faltando</div>
                 {% if card.fields_missing %}
-                    <ul>
+                    <ul class="subtle-list">
                         {% for field in card.fields_missing %}
                             <li>{{ field }}</li>
                         {% endfor %}
@@ -121,6 +127,16 @@
                 {% else %}
                     <p class="muted">Nenhum.</p>
                 {% endif %}
+
+                <div class="section-title">Próximo teste recomendado</div>
+                <p>{{ card.next_test_recommended }}</p>
+
+                <div class="section-title">Bloqueios comuns</div>
+                <ul class="subtle-list">
+                    {% for blocker in card.common_blockers %}
+                        <li>{{ blocker }}</li>
+                    {% endfor %}
+                </ul>
 
                 <div class="actions">
                     <a href="{{ card.configure_url }}">Configurar</a>

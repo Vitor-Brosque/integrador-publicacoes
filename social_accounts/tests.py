@@ -116,8 +116,8 @@ class SocialAccountIntegrationViewsTests(TestCase):
         self.assertIn("access_token", incomplete_state["fields_missing"])
 
         response = self.client.get(reverse("social_accounts:integrations_dashboard"))
-        self.assertContains(response, "pronto")
-        self.assertContains(response, "incompleto")
+        self.assertContains(response, "ready")
+        self.assertContains(response, "incomplete")
 
     def test_token_is_not_rendered_in_listings(self):
         secret_token = "super-secret-token"
@@ -134,4 +134,4 @@ class SocialAccountIntegrationViewsTests(TestCase):
 
         self.assertNotContains(dashboard_response, secret_token)
         self.assertNotContains(platform_response, secret_token)
-        self.assertContains(platform_response, "token preenchido")
+        self.assertContains(platform_response, "token configurado")
