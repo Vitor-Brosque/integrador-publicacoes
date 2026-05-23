@@ -1,5 +1,6 @@
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
+from django.urls import reverse
 from unittest.mock import patch
 
 from media_library.models import MediaAsset
@@ -674,3 +675,66 @@ class PublicationReadinessTest(TestCase):
 
         self.assertEqual(item["status"], "blocked")
         self.assertIn("Todas as mídias do post precisam ter URL pública antes da publicação.", item["messages"])
+
+
+class PublicationListViewTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def approve_post(self, post):
+        post.review.status = "approved"
+        post.review.save()
+        return post
+
+    def test_publications_list_returns_200(self):
+        response = self.client.get(reverse("publications:publication_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Publicações")
+
+    def test_publication_without_social_account_is_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        self.approve_post(post)
+        create_publication_targets(post)
+
+        response = self.client.get(reverse("publications:publication_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "blocked")
+        self.assertContains(response, "Nenhuma conta social vinculada.")
+
+    def test_ready_publication_shows_ready_status(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        self.approve_post(post)
+        SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+            external_account_id="IG123",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        response = self.client.get(reverse("publications:publication_list"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "ready")
+        self.assertContains(response, "Abrir review")

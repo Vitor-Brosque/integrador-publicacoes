@@ -33,6 +33,31 @@
             color: #b91c1c;
             white-space: pre-wrap;
         }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+        .badge.ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .badge.blocked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        ul.compact {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
         .button-link {
             display: inline-block;
             padding: 8px 12px;
@@ -59,6 +84,8 @@
                     <th>Plataforma</th>
                     <th>Status</th>
                     <th>Conta social</th>
+                    <th>Readiness</th>
+                    <th>Mensagens</th>
                     <th>URL externa</th>
                     <th>Erro</th>
                     <th>Ação</th>
@@ -73,6 +100,22 @@
                         <td>{{ publication.get_status_display }}</td>
                         <td>{{ publication.social_account|default:"-" }}</td>
                         <td>
+                            <span class="badge {{ publication.readiness.status }}">
+                                {{ publication.readiness.status }}
+                            </span>
+                        </td>
+                        <td>
+                            {% if publication.readiness.messages %}
+                                <ul class="compact">
+                                    {% for message in publication.readiness.messages %}
+                                        <li>{{ message }}</li>
+                                    {% endfor %}
+                                </ul>
+                            {% else %}
+                                <span class="muted">Sem mensagens.</span>
+                            {% endif %}
+                        </td>
+                        <td>
                             {% if publication.external_url %}
                                 <a href="{{ publication.external_url }}" target="_blank" rel="noopener">{{ publication.external_url }}</a>
                             {% else %}
@@ -86,7 +129,7 @@
                     </tr>
                 {% empty %}
                     <tr>
-                        <td colspan="8">Nenhuma publicação encontrada.</td>
+                        <td colspan="10">Nenhuma publicação encontrada.</td>
                     </tr>
                 {% endfor %}
             </tbody>
