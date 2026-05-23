@@ -1,0 +1,265 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Checklist de publicação real #{{ post.id }}</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 40px auto;
+            padding: 0 20px 40px;
+            background: #f5f5f5;
+            color: #111827;
+        }
+        .card {
+            background: #fff;
+            border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            padding: 24px;
+            margin-bottom: 20px;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+        .subcard {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            background: #fafafa;
+            margin-bottom: 12px;
+        }
+        .media-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+            gap: 16px;
+        }
+        .media-preview img,
+        .media-preview video {
+            width: 100%;
+            height: 160px;
+            object-fit: cover;
+            border-radius: 8px;
+            background: #e5e7eb;
+        }
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            background: #e5e7eb;
+            color: #111827;
+        }
+        .badge.ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .badge.warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+        .badge.blocked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .badge.present {
+            background: #dcfce7;
+            color: #166534;
+        }
+        .badge.absent {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+        .muted { color: #6b7280; }
+        pre {
+            white-space: pre-wrap;
+            background: #f3f4f6;
+            padding: 12px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 0;
+        }
+        ul.compact {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+        .actions {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+        .button-link {
+            display: inline-block;
+            padding: 10px 14px;
+            border-radius: 8px;
+            background: #111827;
+            color: #fff;
+            text-decoration: none;
+        }
+        .button-link.secondary {
+            background: #4b5563;
+        }
+        .button-link.warning {
+            background: #92400e;
+        }
+        .button-link.success {
+            background: #166534;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        th, td {
+            text-align: left;
+            vertical-align: top;
+            padding: 10px;
+            border-bottom: 1px solid #e5e7eb;
+        }
+    </style>
+</head>
+<body>
+    {% include "core/navigation.html" %}
+
+    <div class="card">
+        <h1>Checklist de publicação real #{{ post.id }}</h1>
+        <p class="muted">Resumo consolidado para validar readiness, payload preview, contas sociais e mídia antes de usar tokens reais.</p>
+        <div class="actions">
+            <a class="button-link secondary" href="{% url 'posts:review_post' post.id %}">Voltar para review</a>
+            <a class="button-link secondary" href="{% url 'publications:publication_list' %}">Abrir publicações</a>
+            <a class="button-link secondary" href="{% url 'social_accounts:integrations_dashboard' %}">Abrir integrações</a>
+            <a class="button-link secondary" href="{% url 'core:system_check' %}">Abrir system check</a>
+            <a class="button-link warning" href="{% url 'posts:publish_post' post.id %}">Publicar fake</a>
+            {% if has_pending_instagram_publication %}
+                <a class="button-link" href="{% url 'posts:publish_instagram_real' post.id %}">Publicar real Instagram</a>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Resumo do post</h2>
+        <div class="grid">
+            <div class="subcard">
+                <p><strong>ID:</strong> {{ post.id }}</p>
+                <p><strong>Veículo:</strong> {{ post.vehicle }}</p>
+                <p><strong>Post type:</strong> {{ post.get_post_type_display }}</p>
+                <p><strong>Review status:</strong> {{ post.review.get_status_display }}</p>
+                <p><strong>Plataformas:</strong> {{ post.platform_posts.count }}</p>
+                <p><strong>Quantidade de mídias:</strong> {{ media|length }}</p>
+                <p><a href="{% url 'posts:review_post' post.id %}">Link para review</a></p>
+                <p><a href="{% url 'publications:publication_list' %}">Link para publications</a></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Mídias</h2>
+        {% if media %}
+            <div class="media-grid">
+                {% for item in media %}
+                    <div class="subcard">
+                        <p><strong>Ordem:</strong> {{ item.order }}</p>
+                        <p><strong>Media type:</strong> {{ item.media_type }}</p>
+                        <p><strong>File name:</strong> {{ item.file_name|default:"-" }}</p>
+                        <p><strong>Public URL:</strong> {{ item.public_url|default:"-" }}</p>
+                        <p><strong>Status:</strong> <span class="badge {{ item.public_url_status }}">{{ item.public_url_status }}</span></p>
+                        {% if item.preview_url and item.preview_type == "image" %}
+                            <div class="media-preview">
+                                <img src="{{ item.preview_url }}" alt="{{ item.file_name }}">
+                            </div>
+                        {% elif item.preview_url and item.preview_type == "video" %}
+                            <div class="media-preview">
+                                <video src="{{ item.preview_url }}" controls></video>
+                            </div>
+                        {% endif %}
+                    </div>
+                {% endfor %}
+            </div>
+        {% else %}
+            <p class="muted">Nenhuma mídia vinculada ao post.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Readiness por plataforma</h2>
+        {% if readiness %}
+            {% for item in readiness %}
+                <div class="subcard">
+                    <p><strong>Plataforma:</strong> {{ item.platform_display }}</p>
+                    <p><strong>Status:</strong> <span class="badge {{ item.status }}">{{ item.status }}</span></p>
+                    {% if item.messages %}
+                        <ul class="compact">
+                            {% for message in item.messages %}
+                                <li>{{ message }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Sem mensagens.</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="muted">Nenhuma publicação criada ainda.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Payload preview por plataforma</h2>
+        {% if payload_previews %}
+            {% for item in payload_previews %}
+                <div class="subcard">
+                    <p><strong>Plataforma:</strong> {{ item.platform }}</p>
+                    <p><strong>Warnings:</strong></p>
+                    {% if item.warnings %}
+                        <ul class="compact">
+                            {% for warning in item.warnings %}
+                                <li>{{ warning }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Sem warnings.</p>
+                    {% endif %}
+                    <pre>{{ item.payload_json }}</pre>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="muted">Nenhum payload preview disponível.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Contas sociais</h2>
+        {% if social_account_rows %}
+            {% for row in social_account_rows %}
+                <div class="subcard">
+                    <p><strong>Plataforma:</strong> {{ row.label }}</p>
+                    <p><strong>Existe SocialAccount?</strong> {{ row.exists|yesno:"sim,não" }}</p>
+                    <p><strong>Status:</strong> {{ row.status }}</p>
+                    <p><strong>external_account_id preenchido?</strong> {{ row.external_account_id_present|yesno:"sim,não" }}</p>
+                    <p><strong>access_token preenchido?</strong> {{ row.access_token_present|yesno:"sim,não" }}</p>
+                    <p><a href="{{ row.configure_url }}">Configurar integração</a></p>
+                </div>
+            {% endfor %}
+        {% else %}
+            <p class="muted">Nenhuma plataforma vinculada ao post.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Próximo teste recomendado</h2>
+        {% if next_test_recommendations %}
+            <ul class="compact">
+                {% for recommendation in next_test_recommendations %}
+                    <li>{{ recommendation }}</li>
+                {% endfor %}
+            </ul>
+        {% else %}
+            <p class="muted">Sem recomendação adicional para este post.</p>
+        {% endif %}
+    </div>
+</body>
+</html>

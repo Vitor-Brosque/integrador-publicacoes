@@ -410,3 +410,57 @@ Hatch"""
         self.assertContains(response, "Prontidão para publicação real")
         self.assertContains(response, "Instagram")
         self.assertContains(response, "Preview dos payloads")
+        self.assertContains(response, "Checklist de publicação real")
+
+
+class RealPublishCheckViewTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+1.0 FLEX MANUAL
+R$ 39.900
+2018/2019
+Branco
+4 portas
+Hatch"""
+        )
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_instagram_account(self):
+        return SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+            external_account_id="IG123",
+            access_token="super-secret-token",
+        )
+
+    def test_real_publish_check_returns_200_and_hides_access_token(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_instagram_account()
+        create_publication_targets(post)
+
+        response = self.client.get(reverse("posts:real_publish_check", args=[post.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Checklist de publicação real")
+        self.assertContains(response, "Readiness por plataforma")
+        self.assertContains(response, "Payload preview por plataforma")
+        self.assertContains(response, "Instagram")
+        self.assertContains(response, "image_url")
+        self.assertNotContains(response, "super-secret-token")

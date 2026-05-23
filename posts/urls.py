@@ -9,6 +9,7 @@ from posts.views import (
     publish_instagram_real,
     publish_all_real,
     post_list,
+    real_publish_check,
     review_post,
     save_review_post,
 )
@@ -22,6 +23,7 @@ urlpatterns = [
     path("create/", create_post, name="create_post"),
     path("create-from-vehicle/", create_post_from_vehicle, name="create_post_from_vehicle"),
     path("<int:post_id>/review/", review_post, name="review_post"),
+    path("<int:post_id>/real-publish-check/", real_publish_check, name="real_publish_check"),
     path("<int:post_id>/approve/", approve_post, name="approve_post"),
     path("<int:post_id>/publish/", publish_post, name="publish_post"),
     path(

@@ -244,6 +244,10 @@
                 Criar outro post
             </a>
 
+            <a class="button-link secondary" href="{% url 'posts:real_publish_check' post.id %}">
+                Checklist de publicação real
+            </a>
+
             <a class="button-link secondary" href="/admin/posts/socialpost/{{ post.id }}/change/">
                 Abrir no admin
             </a>

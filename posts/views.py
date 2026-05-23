@@ -1,12 +1,13 @@
 import json
+from pathlib import Path
 
 from django.contrib import messages
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
+from django.urls import reverse
 from publications.models import PublicationTarget
 from media_library.models import MediaAsset
 from media_library.services.media_uploader import upload_media_asset_to_public_storage
-from pathlib import Path
 from posts.forms import CreatePostForm, CreatePostFromVehicleForm
 from posts.models import SocialPost
 from posts.services.post_pipeline import run_post_pipeline
@@ -16,6 +17,7 @@ from publications.services.publication_creator import create_publication_targets
 from publications.services.payload_preview import build_publication_payload_preview
 from publications.services.publisher import publish_to_platform
 from publications.services.real_publisher import publish_to_real_platform
+from social_accounts.services import get_integration_config, get_social_account_for_platform
 from vehicles.models import Vehicle
 
 
@@ -196,6 +198,126 @@ def review_post(request, post_id):
     )
 
 
+def real_publish_check(request, post_id):
+    social_post = get_object_or_404(
+        SocialPost.objects.select_related("vehicle", "review").prefetch_related(
+            "post_media__media_asset",
+            "platform_posts",
+        ),
+        id=post_id,
+    )
+
+    publication_targets = list(
+        PublicationTarget.objects.filter(
+            platform_post__social_post=social_post,
+        ).select_related(
+            "platform_post",
+            "social_account",
+        ).order_by("platform_post__platform")
+    )
+
+    if not publication_targets and social_post.platform_posts.exists():
+        publication_targets = list(create_publication_targets(social_post))
+
+    media_items = list(social_post.post_media.select_related("media_asset").order_by("order", "id"))
+    media = []
+    for item in media_items:
+        media_asset = item.media_asset
+        media.append(
+            {
+                "order": item.order,
+                "media_type": media_asset.media_type,
+                "file_name": Path(media_asset.file.name).name if media_asset.file else "",
+                "public_url": media_asset.public_url or "",
+                "public_url_status": "presente" if media_asset.public_url else "ausente",
+                "preview_type": media_asset.media_type,
+                "preview_url": media_asset.public_url or "",
+            }
+        )
+
+    readiness = get_post_publication_readiness(social_post)
+    readiness_by_platform = {
+        item["platform"]: item
+        for item in readiness
+        if item.get("platform")
+    }
+
+    payload_previews = []
+    for publication in publication_targets:
+        preview = build_publication_payload_preview(publication)
+        payload_previews.append(
+            {
+                "platform": publication.platform_post.get_platform_display(),
+                "platform_slug": publication.platform_post.platform,
+                "payload": preview["payload"],
+                "payload_json": json.dumps(
+                    preview["payload"],
+                    ensure_ascii=False,
+                    indent=2,
+                ),
+                "warnings": preview["warnings"],
+            }
+        )
+    payload_preview_by_platform = {
+        item["platform_slug"]: item
+        for item in payload_previews
+    }
+    has_pending_instagram_publication = any(
+        publication.platform_post.platform == "instagram" and publication.status == "pending"
+        for publication in publication_targets
+    )
+
+    social_account_rows = []
+    next_test_recommendations = []
+    seen_recommendations = set()
+    for platform_post in social_post.platform_posts.all():
+        platform = platform_post.platform
+        config = get_integration_config(platform)
+        account = get_social_account_for_platform(platform)
+        account_present = account is not None
+        access_token_present = bool(account and (account.access_token or "").strip())
+        external_account_id_present = bool(account and (account.external_account_id or "").strip())
+        readiness_item = readiness_by_platform.get(platform)
+        readiness_status = readiness_item["status"] if readiness_item else "blocked"
+
+        social_account_rows.append(
+            {
+                "platform": platform,
+                "label": config["label"],
+                "status": account.status if account else "ausente",
+                "account_name": account.account_name if account else "Nenhuma conta configurada",
+                "exists": account_present,
+                "external_account_id_present": external_account_id_present,
+                "access_token_present": access_token_present,
+                "configure_url": reverse(
+                    "social_accounts:platform_integration",
+                    kwargs={"platform_slug": config["slug"]},
+                ),
+            }
+        )
+
+        recommendation = _build_next_test_recommendation(platform, social_post.post_type, readiness_status)
+        if recommendation and recommendation not in seen_recommendations:
+            next_test_recommendations.append(recommendation)
+            seen_recommendations.add(recommendation)
+
+    return render(
+        request,
+        "posts/real_publish_check.html",
+        {
+            "post": social_post,
+            "publication_targets": publication_targets,
+            "media": media,
+            "readiness": readiness,
+            "payload_previews": payload_previews,
+            "payload_preview_by_platform": payload_preview_by_platform,
+            "social_account_rows": social_account_rows,
+            "next_test_recommendations": next_test_recommendations,
+            "has_pending_instagram_publication": has_pending_instagram_publication,
+        },
+    )
+
+
 def post_list(request):
     posts = (
         SocialPost.objects.select_related("vehicle", "review")
@@ -356,6 +478,25 @@ def validate_platform_post_type_compatibility(platforms, post_type):
             return "YouTube nesta versão aceita apenas posts em vídeo."
         if "tiktok" in platforms:
             return "TikTok nesta versão aceita apenas posts em vídeo."
+
+    return ""
+
+
+def _build_next_test_recommendation(platform, post_type, readiness_status):
+    if platform == "instagram" and readiness_status == "ready" and post_type == "single_image":
+        return "Teste Instagram single_image primeiro, se este post for single_image."
+
+    if platform == "facebook" and readiness_status == "ready" and post_type == "single_image":
+        return "Teste Facebook single_image."
+
+    if platform == "google_business" and readiness_status == "ready" and post_type == "single_image":
+        return "Teste Google Business single_image."
+
+    if platform == "youtube" and post_type == "video" and readiness_status in {"warning", "ready"}:
+        return "Teste YouTube video somente após OAuth/upload estar validado."
+
+    if platform == "tiktok" and post_type == "video" and readiness_status in {"warning", "ready"}:
+        return "Teste TikTok video somente após app/scopes estarem configurados."
 
     return ""
 
