@@ -311,6 +311,62 @@
         {% endif %}
     </div>
 
+    <div class="card" id="payload-preview">
+        <h2>Preview dos payloads</h2>
+
+        {% if publications %}
+            {% for publication in publications %}
+                <div class="platform-card">
+                    <h3>{{ publication.platform_post.get_platform_display }}</h3>
+
+                    <p>
+                        <strong>Post type:</strong>
+                        {{ publication.payload_preview.post_type }}
+                    </p>
+
+                    <p><strong>Mídias:</strong></p>
+                    {% if publication.payload_preview.media %}
+                        <ul>
+                            {% for media_item in publication.payload_preview.media %}
+                                <li>
+                                    ordem {{ media_item.order }} -
+                                    {{ media_item.media_type }} -
+                                    {{ media_item.file_name|default:"-" }}
+                                </li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Nenhuma mídia disponível para preview.</p>
+                    {% endif %}
+
+                    <p><strong>Texto:</strong></p>
+                    <ul>
+                        <li><strong>Título:</strong> {{ publication.payload_preview.text.title|default:"-" }}</li>
+                        <li><strong>Legenda:</strong> {{ publication.payload_preview.text.caption|default:"-" }}</li>
+                        <li><strong>Descrição:</strong> {{ publication.payload_preview.text.description|default:"-" }}</li>
+                        <li><strong>Hashtags:</strong> {{ publication.payload_preview.text.hashtags|default:"-" }}</li>
+                    </ul>
+
+                    <p><strong>Payload:</strong></p>
+                    <pre>{{ publication.payload_preview_json }}</pre>
+
+                    <p><strong>Warnings:</strong></p>
+                    {% if publication.payload_preview.warnings %}
+                        <ul>
+                            {% for warning in publication.payload_preview.warnings %}
+                                <li>{{ warning }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Sem warnings.</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhuma publicação criada ainda.</p>
+        {% endif %}
+    </div>
+
     <form method="post" action="{% url 'posts:save_review_post' post.id %}">
         {% csrf_token %}
 

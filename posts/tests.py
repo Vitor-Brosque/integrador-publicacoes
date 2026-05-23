@@ -409,3 +409,4 @@ Hatch"""
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Prontidão para publicação real")
         self.assertContains(response, "Instagram")
+        self.assertContains(response, "Preview dos payloads")

@@ -1,3 +1,5 @@
+import json
+
 from django.contrib import messages
 from django.db.models import Count
 from django.shortcuts import get_object_or_404, redirect, render
@@ -11,6 +13,7 @@ from posts.services.post_pipeline import run_post_pipeline
 from publications.services.publication_diagnostics import get_publication_diagnostics
 from publications.services.publication_readiness import get_post_publication_readiness
 from publications.services.publication_creator import create_publication_targets
+from publications.services.payload_preview import build_publication_payload_preview
 from publications.services.publisher import publish_to_platform
 from publications.services.real_publisher import publish_to_real_platform
 from vehicles.models import Vehicle
@@ -165,6 +168,14 @@ def review_post(request, post_id):
         "platform_post",
         "social_account",
     )
+    for publication in publications:
+        payload_preview = build_publication_payload_preview(publication)
+        publication.payload_preview = payload_preview
+        publication.payload_preview_json = json.dumps(
+            payload_preview["payload"],
+            ensure_ascii=False,
+            indent=2,
+        )
     has_pending_instagram_publication = publications.filter(
         platform_post__platform="instagram",
         status="pending",

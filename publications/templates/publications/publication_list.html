@@ -66,6 +66,9 @@
             color: white;
             text-decoration: none;
         }
+        .button-link.secondary {
+            background: #4b5563;
+        }
     </style>
 </head>
 <body>
@@ -125,6 +128,7 @@
                         <td class="error">{{ publication.error_message|default:"-" }}</td>
                         <td>
                             <a class="button-link" href="{% url 'posts:review_post' publication.platform_post.social_post.id %}">Abrir review</a>
+                            <a class="button-link secondary" href="{% url 'posts:review_post' publication.platform_post.social_post.id %}#payload-preview">Ver payload</a>
                         </td>
                     </tr>
                 {% empty %}

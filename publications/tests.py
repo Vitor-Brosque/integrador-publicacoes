@@ -1,3 +1,5 @@
+import json
+
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import TestCase
 from django.urls import reverse
@@ -9,6 +11,7 @@ from publications.integrations.payloads.dispatcher import build_publication_payl
 from publications.services.publication_diagnostics import get_publication_diagnostics
 from publications.services.publication_creator import create_publication_targets
 from publications.services.publication_readiness import get_post_publication_readiness
+from publications.services.payload_preview import build_publication_payload_preview
 from publications.services.publisher import publish_to_platform
 from publications.services.real_publisher import publish_to_real_platform
 from social_accounts.models import SocialAccount
@@ -738,3 +741,118 @@ class PublicationListViewTest(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "ready")
         self.assertContains(response, "Abrir review")
+
+
+class PublicationPayloadPreviewTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, name="gol_frente.jpg", public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name=name,
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, name="gol_video.mp4", public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name=name,
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_connected_account(self, platform, **kwargs):
+        defaults = {
+            "platform": platform,
+            "account_name": f"{platform.title()} Account",
+            "status": "connected",
+            "external_account_id": f"{platform}-external-id",
+            "access_token": "secret-token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_publication(self, platform, post_type, with_video=False, extra_account_kwargs=None):
+        vehicle = self.create_vehicle()
+        if with_video:
+            self.create_video_media(vehicle)
+        else:
+            self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=[platform], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+
+        account_kwargs = extra_account_kwargs or {}
+        self.create_connected_account(platform, **account_kwargs)
+
+        return create_publication_targets(post)[0]
+
+    def test_instagram_single_image_preview_has_image_url_and_no_access_token(self):
+        publication = self.create_publication("instagram", "single_image")
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["platform"], "instagram")
+        self.assertEqual(preview["post_type"], "single_image")
+        self.assertEqual(preview["media"][0]["order"], 0)
+        self.assertEqual(preview["payload"]["params"]["image_url"], "https://example.com/gol_frente.jpg")
+        self.assertNotIn("access_token", json.dumps(preview))
+
+    def test_instagram_carousel_preview_has_children(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, name="gol_frente.jpg", public_url="https://example.com/gol_frente.jpg")
+        self.create_image_media(vehicle, name="gol_lateral.jpg", public_url="https://example.com/gol_lateral.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="carousel")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_connected_account("instagram")
+        publication = create_publication_targets(post)[0]
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["params"]["children"][0]["image_url"], "https://example.com/gol_frente.jpg")
+        self.assertTrue(preview["payload"]["params"]["children"][0]["is_carousel_item"])
+        self.assertEqual(len(preview["payload"]["params"]["children"]), 2)
+
+    def test_instagram_video_preview_uses_reels_media_type(self):
+        publication = self.create_publication("instagram", "video", with_video=True)
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["params"]["media_type"], "REELS")
+        self.assertEqual(preview["payload"]["params"]["video_url"], "https://example.com/gol_video.mp4")
+
+    def test_facebook_single_image_preview_uses_photos_endpoint(self):
+        publication = self.create_publication(
+            "facebook",
+            "single_image",
+            extra_account_kwargs={
+                "page_id": "PAGE123",
+            },
+        )
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["endpoint"], "/{page_id}/photos")
+        self.assertEqual(preview["payload"]["params"]["url"], "https://example.com/gol_frente.jpg")
+        self.assertTrue(preview["payload"]["params"]["published"])
+
+    def test_youtube_image_preview_warns_about_incompatibility(self):
+        publication = self.create_publication("youtube", "single_image")
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertIn("YouTube aceita apenas video neste fluxo.", preview["warnings"])
+        self.assertIn("snippet", preview["payload"])
