@@ -81,6 +81,10 @@
                 <div>Integrações</div>
                 <div class="count">{{ integration_count }}</div>
             </a>
+            <a class="tile secondary" href="{% url 'core:system_check' %}">
+                <div>System Check</div>
+                <div class="count">Status</div>
+            </a>
             <a class="tile" href="{% url 'publications:publication_list' %}">
                 <div>Publicações</div>
                 <div class="count">{{ publication_count }}</div>

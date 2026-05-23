@@ -35,3 +35,15 @@ node_modules/
 cloudflare/r2-upload-worker/node_modules/
 
 r2_worker_test.txt
+
+
+# Media uploads
+vehicle_media/
+media/
+
+# Node
+node_modules/
+cloudflare/r2-upload-worker/node_modules/
+
+# Temporary test files
+r2_worker_test.txt

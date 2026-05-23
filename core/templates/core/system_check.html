@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>System Check</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 32px auto;
+            padding: 0 20px 40px;
+            background: #f5f7fb;
+            color: #111827;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 30px rgba(17, 24, 39, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .section {
+            border: 1px solid #e5e7eb;
+            border-radius: 14px;
+            padding: 18px;
+            background: #fafafa;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            margin-bottom: 12px;
+        }
+
+        .ok {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .blocked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        ul {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+
+        .links {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 12px;
+        }
+
+        .link-card {
+            display: block;
+            padding: 14px 16px;
+            border-radius: 12px;
+            background: #111827;
+            color: white;
+            text-decoration: none;
+        }
+
+        .link-card.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>System Check</h1>
+        <p class="muted">Painel operacional para checar se o ambiente está pronto para testes finais de OpenAI e publicação real.</p>
+    </div>
+
+    <div class="grid">
+        <section class="section">
+            <div class="badge {{ environment.status }}">Ambiente Django - {{ environment.status }}</div>
+            <p><strong>DEBUG:</strong> {{ environment.debug }}</p>
+            <p><strong>ALLOWED_HOSTS:</strong> {{ environment.allowed_hosts|join:", " }}</p>
+            <p><strong>Banco em uso:</strong> {{ environment.database_engine }} / {{ environment.database_name }}</p>
+            <p><strong>Timezone:</strong> {{ environment.timezone }}</p>
+        </section>
+
+        <section class="section">
+            <div class="badge {{ r2.status }}">Cloudflare R2 - {{ r2.status }}</div>
+            <p><strong>R2_PUBLIC_BASE_URL:</strong> {{ r2.public_base_url }}</p>
+            <p><strong>R2_WORKER_UPLOAD_URL:</strong> {{ r2.worker_upload_url }}</p>
+            <p><strong>R2_WORKER_UPLOAD_TOKEN:</strong> {{ r2.worker_upload_token }}</p>
+            <p><strong>R2_AUTO_UPLOAD_ENABLED:</strong> {{ r2.auto_upload_enabled }}</p>
+        </section>
+
+        <section class="section">
+            <div class="badge {{ openai.status }}">OpenAI - {{ openai.status }}</div>
+            <p><strong>OPENAI_POST_AI_ENABLED:</strong> {{ openai.enabled }}</p>
+            <p><strong>OPENAI_API_KEY:</strong> {{ openai.api_key }}</p>
+            <p><strong>OPENAI_MODEL:</strong> {{ openai.model }}</p>
+        </section>
+    </div>
+
+    <div class="card">
+        <h2>Integrações sociais</h2>
+        <div class="grid">
+            {% for card in integrations %}
+                <section class="section">
+                    <div class="badge {% if card.status == 'ready' %}ok{% else %}warning{% endif %}">
+                        {{ card.label }} - {{ card.status }}
+                    </div>
+                    <p><strong>Conta:</strong> {{ card.account_name }}</p>
+                    <p><strong>Campos preenchidos:</strong></p>
+                    {% if card.fields_filled %}
+                        <ul>
+                            {% for field in card.fields_filled %}
+                                <li>{{ field }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Nenhum.</p>
+                    {% endif %}
+                    <p><strong>Campos faltando:</strong></p>
+                    {% if card.fields_missing %}
+                        <ul>
+                            {% for field in card.fields_missing %}
+                                <li>{{ field }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Nenhum.</p>
+                    {% endif %}
+                </section>
+            {% endfor %}
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Publicação real</h2>
+        <div class="grid">
+            <section class="section">
+                <div class="badge warning">Pending</div>
+                <p><strong>PublicationTargets pending:</strong> {{ publication_real.pending_count }}</p>
+            </section>
+            <section class="section">
+                <div class="badge ok">Ready</div>
+                <p><strong>Prontos:</strong> {{ publication_real.ready_count }}</p>
+            </section>
+            <section class="section">
+                <div class="badge warning">Warning</div>
+                <p><strong>Com warning:</strong> {{ publication_real.warning_count }}</p>
+            </section>
+            <section class="section">
+                <div class="badge blocked">Blocked</div>
+                <p><strong>Bloqueados:</strong> {{ publication_real.blocked_count }}</p>
+            </section>
+        </div>
+    </div>
+
+    <div class="card">
+        <h2>Links rápidos</h2>
+        <div class="links">
+            {% for link in quick_links %}
+                {% if link.url_name %}
+                    <a class="link-card {% if link.label == 'Home' %}secondary{% endif %}" href="{% url link.url_name %}">{{ link.label }}</a>
+                {% else %}
+                    <a class="link-card" href="{{ link.url }}">{{ link.label }}</a>
+                {% endif %}
+            {% endfor %}
+        </div>
+    </div>
+</body>
+</html>
