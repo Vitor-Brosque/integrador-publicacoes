@@ -13,7 +13,7 @@ class SocialAccountAdmin(admin.ModelAdmin):
         "page_id",
         "metadata",
         "status",
-        "access_token",
+        "token_summary",
         "connected_at",
         "token_expires_at",
     )
@@ -27,3 +27,7 @@ class SocialAccountAdmin(admin.ModelAdmin):
         "status",
         "created_at",
     )
+
+    @admin.display(description="Token")
+    def token_summary(self, obj):
+        return "token preenchido" if obj.access_token else "token vazio"

@@ -5,7 +5,9 @@ from unittest.mock import patch
 from media_library.models import MediaAsset
 from posts.services.post_pipeline import run_post_pipeline
 from publications.integrations.payloads.dispatcher import build_publication_payload
+from publications.services.publication_diagnostics import get_publication_diagnostics
 from publications.services.publication_creator import create_publication_targets
+from publications.services.publication_readiness import get_post_publication_readiness
 from publications.services.publisher import publish_to_platform
 from publications.services.real_publisher import publish_to_real_platform
 from social_accounts.models import SocialAccount
@@ -354,3 +356,321 @@ class PublicationPublisherTest(TestCase):
         self.assertEqual(result, publication)
         instagram_publisher_class.assert_called_once()
         instagram_publisher.publish.assert_called_once_with(publication)
+
+
+class PublicationDiagnosticsTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, name="gol_frente.jpg", public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name=name,
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, name="gol_video.mp4", public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name=name,
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_connected_account(self, platform, **kwargs):
+        defaults = {
+            "platform": platform,
+            "account_name": f"{platform.title()} Account",
+            "status": "connected",
+            "access_token": "token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_approved_post(self, vehicle, platforms=None, post_type="single_image"):
+        post = run_post_pipeline(
+            vehicle,
+            platforms=platforms,
+            post_type=post_type,
+        )
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        return post
+
+    def test_post_without_review_approved_returns_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("A revisão precisa ser aprovada antes da publicação real.", diagnostics[0]["messages"])
+
+    def test_post_approved_without_social_account_returns_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = self.create_approved_post(vehicle, platforms=["instagram"], post_type="single_image")
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("Nenhuma conta social vinculada.", diagnostics[0]["messages"])
+
+    def test_instagram_single_image_ready(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = self.create_approved_post(vehicle, platforms=["instagram"], post_type="single_image")
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "ready")
+
+    def test_youtube_single_image_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = self.create_approved_post(vehicle, platforms=["youtube"], post_type="single_image")
+        self.create_connected_account(
+            "youtube",
+            external_account_id="YT123",
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("YouTube aceita apenas vídeo nesta versão.", diagnostics[0]["messages"])
+
+    def test_google_business_video_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_video_media(vehicle)
+
+        post = self.create_approved_post(vehicle, platforms=["google_business"], post_type="video")
+        self.create_connected_account(
+            "google_business",
+            external_account_id="accounts/123/locations/456",
+            metadata={"location_name": "accounts/123/locations/456"},
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("Google Business nesta versão não publica vídeo.", diagnostics[0]["messages"])
+
+    def test_carousel_with_one_image_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = self.create_approved_post(vehicle, platforms=["instagram"], post_type="carousel")
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("Carrossel exige de 2 a 10 imagens.", diagnostics[0]["messages"])
+
+    def test_media_without_public_url_is_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, public_url="")
+
+        post = self.create_approved_post(vehicle, platforms=["instagram"], post_type="single_image")
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+        )
+        create_publication_targets(post)
+
+        diagnostics = get_publication_diagnostics(post)
+
+        self.assertEqual(diagnostics[0]["status"], "blocked")
+        self.assertIn("Todas as mídias do post precisam ter URL pública antes da publicação.", diagnostics[0]["messages"])
+
+
+class PublicationReadinessTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def approve_post(self, post):
+        post.review.status = "approved"
+        post.review.save()
+        return post
+
+    def create_connected_account(self, platform, **kwargs):
+        defaults = {
+            "account_name": f"{platform} account",
+            "status": "connected",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(platform=platform, **defaults)
+
+    def get_post_with_targets(self, platforms, post_type="single_image", approved=True):
+        vehicle = self.create_vehicle()
+        if post_type == "video":
+            self.create_video_media(vehicle)
+        else:
+            self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=platforms, post_type=post_type)
+        if approved:
+            self.approve_post(post)
+
+        create_publication_targets(post)
+        return post
+
+    def get_readiness_by_platform(self, readiness, platform):
+        return [item for item in readiness if item["platform"] == platform][0]
+
+    def test_post_pendente_retorna_blocked(self):
+        post = self.get_post_with_targets(["instagram"], approved=False)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("A revisão precisa ser aprovada antes da publicação real.", item["messages"])
+
+    def test_post_aprovado_sem_social_account_retorna_blocked(self):
+        post = self.get_post_with_targets(["instagram"], approved=True)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "instagram")
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("Nenhuma conta social vinculada.", item["messages"])
+
+    def test_instagram_single_image_com_conta_token_id_public_url_retorna_ready(self):
+        post = self.get_post_with_targets(["instagram"], post_type="single_image", approved=True)
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "instagram")
+
+        self.assertEqual(item["status"], "ready")
+
+    def test_youtube_single_image_retorna_blocked(self):
+        post = self.get_post_with_targets(["youtube"], post_type="single_image", approved=True)
+        self.create_connected_account(
+            "youtube",
+            external_account_id="channel-123",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "youtube")
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("YouTube aceita apenas vídeo neste fluxo.", item["messages"])
+
+    def test_google_business_video_retorna_blocked(self):
+        post = self.get_post_with_targets(["google_business"], post_type="video", approved=True)
+        self.create_connected_account(
+            "google_business",
+            external_account_id="accounts/123/locations/456",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "google_business")
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("Google Business nesta versão não publica vídeo.", item["messages"])
+
+    def test_carousel_com_uma_imagem_retorna_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="carousel")
+        self.approve_post(post)
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+            access_token="token-123",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "instagram")
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("Carrossel exige de 2 a 10 imagens.", item["messages"])
+
+    def test_media_sem_public_url_retorna_blocked(self):
+        post = self.get_post_with_targets(["instagram"], post_type="single_image", approved=True)
+        self.create_connected_account(
+            "instagram",
+            external_account_id="IG123",
+            access_token="token-123",
+        )
+
+        post_media = post.post_media.first()
+        media_asset = post_media.media_asset
+        media_asset.public_url = ""
+        media_asset.save(update_fields=["public_url"])
+
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = self.get_readiness_by_platform(readiness, "instagram")
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("Todas as mídias do post precisam ter URL pública antes da publicação.", item["messages"])

@@ -1,0 +1,205 @@
+from publications.models import PublicationTarget
+
+
+def get_publication_diagnostics(social_post) -> list[dict]:
+    publication_targets = list(
+        PublicationTarget.objects.filter(
+            platform_post__social_post=social_post,
+        ).select_related(
+            "platform_post",
+            "social_account",
+        )
+    )
+
+    if not publication_targets:
+        return [
+            {
+                "platform": "",
+                "platform_display": "Publicações",
+                "status": "blocked",
+                "messages": ["O post precisa ser aprovado para criar publicações."],
+                "publication_target": None,
+            }
+        ]
+
+    diagnostics = []
+    for publication_target in publication_targets:
+        diagnostics.append(_build_publication_target_diagnostic(publication_target))
+
+    return diagnostics
+
+
+def _build_publication_target_diagnostic(publication_target):
+    platform_post = publication_target.platform_post
+    social_post = platform_post.social_post
+    platform = platform_post.platform
+    platform_display = platform_post.get_platform_display()
+    messages = []
+    blocked = False
+    warning = False
+
+    review = getattr(social_post, "review", None)
+    if review is None or review.status != "approved":
+        blocked = True
+        messages.append("A revisão precisa ser aprovada antes da publicação real.")
+
+    social_account = publication_target.social_account
+    if social_account is None:
+        blocked = True
+        messages.append("Nenhuma conta social vinculada.")
+    else:
+        if social_account.status != "connected":
+            blocked = True
+            messages.append("Conta social não está conectada.")
+
+        if not _get_access_token(social_account):
+            blocked = True
+            messages.append("Token de acesso não configurado.")
+
+        identifier_message = _validate_platform_identifier(platform, social_account)
+        if identifier_message:
+            blocked = True
+            messages.append(identifier_message)
+
+    media_items = list(social_post.post_media.select_related("media_asset").order_by("order"))
+    media_messages, media_blocked = _validate_media_for_post(platform, social_post.post_type, media_items)
+    messages.extend(media_messages)
+    blocked = blocked or media_blocked
+
+    format_status, format_messages = _validate_platform_format(platform, social_post.post_type)
+    messages.extend(format_messages)
+    if format_status == "blocked":
+        blocked = True
+    elif format_status == "warning":
+        warning = True
+
+    status = "ready"
+    if blocked:
+        status = "blocked"
+    elif warning or messages:
+        status = "warning"
+
+    messages = _unique_messages(messages)
+
+    return {
+        "platform": platform,
+        "platform_display": platform_display,
+        "status": status,
+        "messages": messages,
+        "publication_target": publication_target,
+    }
+
+
+def _get_access_token(social_account):
+    return (social_account.access_token or "").strip()
+
+
+def _validate_platform_identifier(platform, social_account):
+    if platform == "instagram":
+        if not (social_account.external_account_id or "").strip():
+            return "Instagram Business Account ID não configurado."
+
+    if platform == "facebook":
+        if not ((social_account.page_id or "").strip() or (social_account.external_account_id or "").strip()):
+            return "Facebook Page ID não configurado."
+
+    if platform == "google_business":
+        location_name = _get_google_business_location_name(social_account)
+        if not location_name:
+            return "Location resource name não configurado."
+
+    if platform == "youtube":
+        if not (social_account.external_account_id or "").strip():
+            return "Channel ID/OAuth não configurado."
+
+    if platform == "tiktok":
+        if not (social_account.external_account_id or "").strip():
+            return "Creator/Open ID ou configuração TikTok não configurada."
+
+    return ""
+
+
+def _get_google_business_location_name(social_account):
+    metadata = social_account.metadata or {}
+    if isinstance(metadata, dict):
+        location_name = metadata.get("location_name", "")
+        if isinstance(location_name, str):
+            return location_name.strip()
+    return ""
+
+
+def _validate_media_for_post(platform, post_type, media_items):
+    messages = []
+    blocked = False
+
+    if not media_items:
+        return ["Nenhuma mídia vinculada ao post."], True
+
+    missing_public_url = [
+        item
+        for item in media_items
+        if not (getattr(item.media_asset, "public_url", "") or "").strip()
+    ]
+    if missing_public_url:
+        blocked = True
+        messages.append("Todas as mídias do post precisam ter URL pública antes da publicação.")
+
+    media_types = [item.media_asset.media_type for item in media_items]
+    media_count = len(media_items)
+
+    if post_type == "single_image":
+        if media_count != 1:
+            return ["Foto única exige exatamente 1 imagem."], True
+        if media_types[0] != "image":
+            return ["Foto única aceita apenas imagem."], True
+
+    if post_type == "carousel":
+        if media_count < 2 or media_count > 10:
+            return ["Carrossel exige de 2 a 10 imagens."], True
+        if any(media_type != "image" for media_type in media_types):
+            return ["Carrossel aceita apenas imagens."], True
+
+    if post_type == "video":
+        if media_count != 1:
+            return ["Vídeo exige exatamente 1 arquivo de vídeo."], True
+        if media_types[0] != "video":
+            return ["Vídeo aceita apenas arquivo de vídeo."], True
+
+    return messages, blocked
+
+
+def _validate_platform_format(platform, post_type):
+    if platform == "instagram":
+        return "ready", []
+
+    if platform == "facebook":
+        if post_type == "single_image":
+            return "ready", []
+        return "warning", ["Publicação real Facebook pode estar limitada a foto única nesta versão."]
+
+    if platform == "google_business":
+        if post_type == "video":
+            return "blocked", ["Google Business nesta versão não publica vídeo."]
+        if post_type == "carousel":
+            return "warning", ["Google Business pode usar apenas a imagem principal."]
+        return "ready", []
+
+    if platform == "youtube":
+        if post_type != "video":
+            return "blocked", ["YouTube aceita apenas vídeo nesta versão."]
+        return "warning", ["YouTube requer OAuth e upload via videos.insert; verifique se o publisher real está habilitado."]
+
+    if platform == "tiktok":
+        if post_type != "video":
+            return "blocked", ["TikTok nesta versão é priorizado para vídeo."]
+        return "warning", ["TikTok requer app/scopes Content Posting API configurados."]
+
+    return "warning", []
+
+
+def _unique_messages(messages):
+    unique = []
+    for message in messages:
+        if message and message not in unique:
+            unique.append(message)
+    return unique

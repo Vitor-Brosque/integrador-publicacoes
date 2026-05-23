@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>Integrações</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1200px;
+            margin: 32px auto;
+            padding: 0 20px 40px;
+            background: #f5f7fb;
+            color: #111827;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 30px rgba(17, 24, 39, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 16px;
+        }
+
+        .integration-card {
+            border: 1px solid #e5e7eb;
+            border-radius: 16px;
+            padding: 20px;
+            background: linear-gradient(180deg, #ffffff 0%, #fafafa 100%);
+        }
+
+        .pill {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 999px;
+            font-size: 12px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+        }
+
+        .pill.ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .pill.pending {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .muted {
+            color: #6b7280;
+        }
+
+        .section-title {
+            margin: 18px 0 8px;
+            font-size: 14px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            color: #374151;
+        }
+
+        ul {
+            margin: 8px 0 0;
+            padding-left: 18px;
+        }
+
+        .actions a {
+            display: inline-block;
+            margin-top: 16px;
+            padding: 10px 14px;
+            border-radius: 10px;
+            background: #111827;
+            color: #fff;
+            text-decoration: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <h1>Integrações sociais</h1>
+        <p class="muted">Configure cada rede antes de testar tokens reais. Nenhuma chamada externa é feita nesta etapa.</p>
+    </div>
+
+    <div class="grid">
+        {% for card in cards %}
+            <section class="integration-card">
+                <div class="pill {% if card.status_label == 'pronto' %}ready{% else %}pending{% endif %}">
+                    {{ card.status_label }}
+                </div>
+                <h2>{{ card.label }}</h2>
+                <p class="muted">{{ card.note }}</p>
+                <p><strong>Conta:</strong> {{ card.account_name }}</p>
+
+                <div class="section-title">Campos preenchidos</div>
+                {% if card.fields_filled %}
+                    <ul>
+                        {% for field in card.fields_filled %}
+                            <li>{{ field }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="muted">Nenhum.</p>
+                {% endif %}
+
+                <div class="section-title">Campos faltando</div>
+                {% if card.fields_missing %}
+                    <ul>
+                        {% for field in card.fields_missing %}
+                            <li>{{ field }}</li>
+                        {% endfor %}
+                    </ul>
+                {% else %}
+                    <p class="muted">Nenhum.</p>
+                {% endif %}
+
+                <div class="actions">
+                    <a href="{{ card.configure_url }}">Configurar</a>
+                </div>
+            </section>
+        {% endfor %}
+    </div>
+</body>
+</html>

@@ -7,6 +7,8 @@ from vehicles.models import Vehicle
 from django.core.files.uploadedfile import SimpleUploadedFile
 
 from media_library.models import MediaAsset
+from publications.services.publication_creator import create_publication_targets
+from social_accounts.models import SocialAccount
 
 
 class PostPipelineTest(TestCase):
@@ -358,3 +360,52 @@ Hatch"""
         )
         self.assertEqual(response.status_code, 302)
         self.assertEqual(vehicle.social_posts.count(), 1)
+
+
+class ReviewPostReadinessViewTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(
+            raw_input="""Volkswagen Gol
+1.0 FLEX MANUAL
+R$ 39.900
+2018/2019
+Branco
+4 portas
+Hatch"""
+        )
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_connected_account(self):
+        return SocialAccount.objects.create(
+            platform="instagram",
+            account_name="Instagram Rodoviária",
+            status="connected",
+            external_account_id="IG123",
+            access_token="token-123",
+        )
+
+    def test_review_post_exibe_card_de_prontidao(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+        post = run_post_pipeline(vehicle, platforms=["instagram"], post_type="single_image")
+        post.review.status = "approved"
+        post.review.save()
+        self.create_connected_account()
+        create_publication_targets(post)
+
+        response = self.client.get(reverse("posts:review_post", args=[post.id]))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Prontidão para publicação real")
+        self.assertContains(response, "Instagram")

@@ -1,0 +1,166 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <title>{{ config.label }} - Integrações</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            max-width: 1100px;
+            margin: 32px auto;
+            padding: 0 20px 40px;
+            background: #f5f7fb;
+            color: #111827;
+        }
+
+        .card {
+            background: #fff;
+            border-radius: 16px;
+            padding: 24px;
+            box-shadow: 0 8px 30px rgba(17, 24, 39, 0.08);
+            margin-bottom: 20px;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 1.3fr 0.7fr;
+            gap: 20px;
+        }
+
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+
+        label {
+            display: block;
+            font-weight: 700;
+            margin-bottom: 6px;
+        }
+
+        input, textarea, select {
+            width: 100%;
+            box-sizing: border-box;
+            border: 1px solid #d1d5db;
+            border-radius: 10px;
+            padding: 10px 12px;
+            font: inherit;
+            background: #fff;
+        }
+
+        .field {
+            margin-bottom: 16px;
+        }
+
+        .helptext, .muted {
+            color: #6b7280;
+            font-size: 14px;
+        }
+
+        .errorlist {
+            color: #b91c1c;
+            margin: 6px 0 0;
+            padding-left: 18px;
+        }
+
+        .actions {
+            display: flex;
+            gap: 12px;
+            flex-wrap: wrap;
+            margin-top: 18px;
+        }
+
+        .button {
+            display: inline-block;
+            border: 0;
+            border-radius: 10px;
+            padding: 12px 16px;
+            background: #111827;
+            color: #fff;
+            text-decoration: none;
+            cursor: pointer;
+            font: inherit;
+        }
+
+        .button.secondary {
+            background: #e5e7eb;
+            color: #111827;
+        }
+
+        .status-box {
+            border: 1px solid #e5e7eb;
+            border-radius: 12px;
+            padding: 16px;
+            background: #fafafa;
+        }
+
+        .token-state {
+            padding: 8px 10px;
+            border-radius: 8px;
+            background: #eff6ff;
+            color: #1d4ed8;
+            font-size: 14px;
+            display: inline-block;
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        {% include "core/navigation.html" %}
+        <p><a href="{% url 'social_accounts:integrations_dashboard' %}">Voltar para Integrações</a></p>
+        <h1>{{ config.label }}</h1>
+        <p class="muted">{{ config.note }}</p>
+    </div>
+
+    <div class="grid">
+        <div class="card">
+            <form method="post">
+                {% csrf_token %}
+                {% for field in form %}
+                    <div class="field">
+                        {{ field.label_tag }}
+                        {{ field }}
+                        {% if field.help_text %}
+                            <div class="helptext">{{ field.help_text }}</div>
+                        {% endif %}
+                        {% for error in field.errors %}
+                            <ul class="errorlist"><li>{{ error }}</li></ul>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+
+                <div class="actions">
+                    <button class="button" type="submit">Salvar configuração</button>
+                    <a class="button secondary" href="{% url 'social_accounts:integrations_dashboard' %}">Cancelar</a>
+                </div>
+            </form>
+        </div>
+
+        <aside class="card">
+            <div class="status-box">
+                <h2>Status atual</h2>
+                <p><strong>Conta:</strong> {{ account.account_name|default:"Nenhuma conta configurada" }}</p>
+                <p><strong>Prontidão:</strong> {% if token_state == "preenchido" and account and account.status == "connected" and account.external_account_id %}pronto{% else %}incompleto{% endif %}</p>
+                <p><strong>Token atual:</strong> <span class="token-state">token {{ token_state }}</span></p>
+            </div>
+
+            <div class="status-box" style="margin-top: 16px;">
+                <h2>Como configurar</h2>
+                <ul>
+                    <li><strong>Instagram:</strong> external_account_id = Instagram Business Account ID.</li>
+                    <li><strong>Instagram:</strong> access_token = token Meta com permissão para publicar.</li>
+                    <li><strong>Facebook:</strong> external_account_id = Facebook Page ID.</li>
+                    <li><strong>Facebook:</strong> access_token = Page Access Token.</li>
+                    <li><strong>Google Business:</strong> external_account_id = accounts/{accountId}/locations/{locationId}.</li>
+                    <li><strong>Google Business:</strong> access_token = OAuth com permissão para gerenciar a ficha.</li>
+                    <li><strong>YouTube:</strong> external_account_id = channel_id.</li>
+                    <li><strong>YouTube:</strong> access_token = OAuth com permissão de upload.</li>
+                    <li><strong>TikTok:</strong> external_account_id = open_id/creator id.</li>
+                    <li><strong>TikTok:</strong> access_token = TikTok user access token.</li>
+                </ul>
+            </div>
+        </aside>
+    </div>
+</body>
+</html>

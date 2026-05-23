@@ -169,6 +169,40 @@
             color: #b91c1c;
         }
 
+        .diagnostic-ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .diagnostic-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .diagnostic-blocked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .readiness-ready {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .readiness-warning {
+            background: #fef3c7;
+            color: #92400e;
+        }
+
+        .readiness-blocked {
+            background: #fee2e2;
+            color: #b91c1c;
+        }
+
+        .readiness-item ul {
+            margin-top: 8px;
+        }
+
         .url-text {
             word-break: break-all;
         }
@@ -243,6 +277,37 @@
             </div>
         {% else %}
             <p>Nenhuma mídia vinculada a este post.</p>
+        {% endif %}
+    </div>
+
+    <div class="card">
+        <h2>Prontidão para publicação real</h2>
+
+        {% if publication_readiness %}
+            {% for readiness in publication_readiness %}
+                <div class="platform-card readiness-item">
+                    <h3>{{ readiness.platform_display }}</h3>
+
+                    <p>
+                        <strong>Status:</strong>
+                        <span class="badge readiness-{{ readiness.status }}">
+                            {{ readiness.status }}
+                        </span>
+                    </p>
+
+                    {% if readiness.messages %}
+                        <ul>
+                            {% for message in readiness.messages %}
+                                <li>{{ message }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Pronto para publicação real.</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhuma publicação criada ainda.</p>
         {% endif %}
     </div>
 
@@ -344,6 +409,37 @@
             </div>
         {% endif %}
     </form>
+
+    <div class="card">
+        <h2>Diagnóstico de publicação real</h2>
+
+        {% if publication_diagnostics %}
+            {% for diagnostic in publication_diagnostics %}
+                <div class="platform-card">
+                    <h3>{{ diagnostic.platform_display }}</h3>
+
+                    <p>
+                        <strong>Status:</strong>
+                        <span class="badge diagnostic-{{ diagnostic.status }}">
+                            {{ diagnostic.status }}
+                        </span>
+                    </p>
+
+                    {% if diagnostic.messages %}
+                        <ul>
+                            {% for message in diagnostic.messages %}
+                                <li>{{ message }}</li>
+                            {% endfor %}
+                        </ul>
+                    {% else %}
+                        <p class="muted">Pronto para tentativa real.</p>
+                    {% endif %}
+                </div>
+            {% endfor %}
+        {% else %}
+            <p>Nenhum diagnóstico disponível.</p>
+        {% endif %}
+    </div>
 
     <div class="card">
         <h2>Publicações</h2>

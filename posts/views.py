@@ -8,6 +8,8 @@ from pathlib import Path
 from posts.forms import CreatePostForm, CreatePostFromVehicleForm
 from posts.models import SocialPost
 from posts.services.post_pipeline import run_post_pipeline
+from publications.services.publication_diagnostics import get_publication_diagnostics
+from publications.services.publication_readiness import get_post_publication_readiness
 from publications.services.publication_creator import create_publication_targets
 from publications.services.publisher import publish_to_platform
 from publications.services.real_publisher import publish_to_real_platform
@@ -167,6 +169,8 @@ def review_post(request, post_id):
         platform_post__platform="instagram",
         status="pending",
     ).exists()
+    publication_diagnostics = get_publication_diagnostics(social_post)
+    publication_readiness = get_post_publication_readiness(social_post)
 
     return render(
         request,
@@ -174,6 +178,8 @@ def review_post(request, post_id):
         {
             "post": social_post,
             "publications": publications,
+            "publication_diagnostics": publication_diagnostics,
+            "publication_readiness": publication_readiness,
             "has_pending_instagram_publication": has_pending_instagram_publication,
         },
     )

@@ -77,6 +77,10 @@
                 <div>Posts pendentes de revisão</div>
                 <div class="count">{{ pending_review_count }}</div>
             </a>
+            <a class="tile" href="{% url 'social_accounts:integrations_dashboard' %}">
+                <div>Integrações</div>
+                <div class="count">{{ integration_count }}</div>
+            </a>
             <a class="tile" href="{% url 'publications:publication_list' %}">
                 <div>Publicações</div>
                 <div class="count">{{ publication_count }}</div>
