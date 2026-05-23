@@ -121,7 +121,7 @@ def build_social_integrations_section():
             )
             continue
 
-        ready = card["status_label"] == "pronto"
+        ready = card["status_label"] == "ready"
         cards.append(
             {
                 "label": card["label"],

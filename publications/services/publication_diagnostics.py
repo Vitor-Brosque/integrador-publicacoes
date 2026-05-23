@@ -1,4 +1,5 @@
 from publications.models import PublicationTarget
+from publications.services.real_publishability import get_real_publishability
 
 
 def get_publication_diagnostics(social_post) -> list[dict]:
@@ -73,6 +74,16 @@ def _build_publication_target_diagnostic(publication_target):
     elif format_status == "warning":
         warning = True
 
+    publisher_status, publisher_messages = get_real_publishability(
+        platform=platform,
+        post_type=social_post.post_type,
+    )
+    messages.extend(publisher_messages)
+    if publisher_status == "blocked":
+        blocked = True
+    elif publisher_status == "warning":
+        warning = True
+
     status = "ready"
     if blocked:
         status = "blocked"
@@ -104,9 +115,8 @@ def _validate_platform_identifier(platform, social_account):
             return "Facebook Page ID não configurado."
 
     if platform == "google_business":
-        location_name = _get_google_business_location_name(social_account)
-        if not location_name:
-            return "Location resource name não configurado."
+        if not (social_account.external_account_id or "").strip():
+            return "Location resource name não configurado em external_account_id."
 
     if platform == "youtube":
         if not (social_account.external_account_id or "").strip():
@@ -116,15 +126,6 @@ def _validate_platform_identifier(platform, social_account):
         if not (social_account.external_account_id or "").strip():
             return "Creator/Open ID ou configuração TikTok não configurada."
 
-    return ""
-
-
-def _get_google_business_location_name(social_account):
-    metadata = social_account.metadata or {}
-    if isinstance(metadata, dict):
-        location_name = metadata.get("location_name", "")
-        if isinstance(location_name, str):
-            return location_name.strip()
     return ""
 
 
@@ -178,11 +179,15 @@ def _validate_platform_format(platform, post_type):
         return "warning", ["Publicação real Facebook pode estar limitada a foto única nesta versão."]
 
     if platform == "google_business":
-        if post_type == "video":
-            return "blocked", ["Google Business nesta versão não publica vídeo."]
+        if post_type == "single_image":
+            return "ready", []
         if post_type == "carousel":
-            return "warning", ["Google Business pode usar apenas a imagem principal."]
-        return "ready", []
+            return "warning", ["Google Business will publish using the first image only."]
+        if post_type == "video":
+            return "blocked", [
+                "Google Business real publishing does not support video in this version.",
+            ]
+        return "blocked", ["Tipo de post não suportado para Google Business nesta versão."]
 
     if platform == "youtube":
         if post_type != "video":

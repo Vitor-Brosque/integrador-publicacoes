@@ -1,0 +1,15 @@
+# Real Integrations Status
+
+| Plataforma | O que já está implementado | Credenciais necessárias | Está pronto para testar com token? | Primeiro teste recomendado | Bloqueios conhecidos |
+| --- | --- | --- | --- | --- | --- |
+| OpenAI | `OPENAI_POST_AI_ENABLED` usa OpenAI quando a flag está ativa e a API key existe; se falhar, cai no fallback. | `OPENAI_API_KEY`, `OPENAI_POST_AI_ENABLED`, `OPENAI_MODEL` | Sim, com fallback preservado | Validar `single_image` e `carousel` com a flag ligada | Dependência externa e chave ausente; se falhar, cai para fallback |
+| Instagram | `InstagramRealPublisher` está implementado para `single_image`, `carousel` e `video/Reels`, usando `public_url` e `external_account_id`. | `Instagram Business Account ID` + Meta access token | Sim | `single_image` primeiro | Erros de Graph API, mídia sem `public_url`, conta não conectada |
+| Facebook | `FacebookRealPublisher` já publica foto única em Page usando `/\{page_id\}/photos` com `url`, `caption`, `published=true` e `access_token`. | `Facebook Page ID` + Page Access Token | Sim, para `single_image` | `single_image` | `carousel` e `video` continuam não suportados no publisher real |
+| Google Business | `GoogleBusinessRealPublisher` já publica Local Post com imagem principal; `carousel` usa apenas a primeira imagem. | `accounts/{accountId}/locations/{locationId}` + OAuth token com `business.manage` | Sim, para `single_image`; parcial para `carousel` | `single_image` primeiro | `video` não suportado; `carousel` usa apenas a primeira imagem |
+| YouTube | A exigência de upload via `videos.insert` está explícita, mas o publisher real ainda não faz o upload real. | `channel_id` + OAuth token | Não | `video` somente após implementar upload real | Falta upload real via YouTube Data API |
+| TikTok | A exigência de Content Posting API está explícita, mas o publisher real ainda não faz direct post real. | `open_id/creator id` + TikTok user token | Não | `video` somente após implementar o fluxo real | Falta direct post real e configuração completa de app/scopes |
+
+## Leitura prática
+- Instagram é a única plataforma já pronta para um teste real com token.
+- Facebook e Google Business estão prontos para `single_image`; YouTube e TikTok continuam parciais ou bloqueadas no publisher real.
+- Nenhuma tela deve sugerir `ready` para uma plataforma cujo publisher real ainda esteja bloqueado ou incompleto.

@@ -477,14 +477,16 @@ class PublicationDiagnosticsTest(TestCase):
         self.create_connected_account(
             "google_business",
             external_account_id="accounts/123/locations/456",
-            metadata={"location_name": "accounts/123/locations/456"},
         )
         create_publication_targets(post)
 
         diagnostics = get_publication_diagnostics(post)
 
         self.assertEqual(diagnostics[0]["status"], "blocked")
-        self.assertIn("Google Business nesta versão não publica vídeo.", diagnostics[0]["messages"])
+        self.assertIn(
+            "Google Business real publishing does not support video in this version.",
+            diagnostics[0]["messages"],
+        )
 
     def test_carousel_with_one_image_blocked(self):
         vehicle = self.create_vehicle()
@@ -531,6 +533,30 @@ class PublicationReadinessTest(TestCase):
                 name="gol_frente.jpg",
                 content=b"fake image content",
                 content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
             ),
             public_url=public_url,
         )
@@ -637,7 +663,10 @@ class PublicationReadinessTest(TestCase):
         item = self.get_readiness_by_platform(readiness, "google_business")
 
         self.assertEqual(item["status"], "blocked")
-        self.assertIn("Google Business nesta versão não publica vídeo.", item["messages"])
+        self.assertIn(
+            "Google Business real publishing does not support video in this version.",
+            item["messages"],
+        )
 
     def test_carousel_com_uma_imagem_retorna_blocked(self):
         vehicle = self.create_vehicle()
@@ -742,6 +771,144 @@ class PublicationListViewTest(TestCase):
         self.assertContains(response, "ready")
         self.assertContains(response, "Abrir review")
         self.assertContains(response, "Checklist")
+
+
+class RealPublisherReadinessAuditTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_account(self, platform, **kwargs):
+        defaults = {
+            "platform": platform,
+            "account_name": f"{platform.title()} Account",
+            "status": "connected",
+            "external_account_id": f"{platform}-external-id",
+            "access_token": "demo-token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_post(self, platform, post_type):
+        vehicle = self.create_vehicle()
+        if post_type == "video":
+            self.create_video_media(vehicle)
+        else:
+            self.create_image_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=[platform], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        create_publication_targets(post)
+        return post
+
+    def test_facebook_single_image_is_ready(self):
+        post = self.create_post("facebook", "single_image")
+        self.create_account(
+            "facebook",
+            page_id="PAGE123",
+            external_account_id="PAGE123",
+            access_token="demo-token",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "ready")
+        self.assertNotIn("publisher real ainda não está ativo", " ".join(item["messages"]))
+
+    def test_google_business_single_image_is_ready(self):
+        post = self.create_post("google_business", "single_image")
+        self.create_account(
+            "google_business",
+            external_account_id="accounts/123/locations/456",
+            access_token="demo-token",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "ready")
+        self.assertEqual(item["messages"], [])
+
+    def test_google_business_carousel_is_warning_first_image_only(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, public_url="https://example.com/gol_frente.jpg")
+        self.create_image_media(vehicle, public_url="https://example.com/gol_lateral.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["google_business"], post_type="carousel")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_account(
+            "google_business",
+            external_account_id="accounts/123/locations/456",
+            access_token="demo-token",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "warning")
+        self.assertIn(
+            "Google Business will publish using the first image only.",
+            item["messages"],
+        )
+
+    def test_youtube_video_is_blocked_when_publisher_not_active(self):
+        post = self.create_post("youtube", "video")
+        self.create_account(
+            "youtube",
+            external_account_id="channel-123",
+            access_token="demo-token",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("publisher real ainda não está ativo", " ".join(item["messages"]))
+
+    def test_tiktok_video_is_blocked_when_publisher_not_active(self):
+        post = self.create_post("tiktok", "video")
+        self.create_account(
+            "tiktok",
+            external_account_id="creator-123",
+            access_token="demo-token",
+        )
+        create_publication_targets(post)
+
+        readiness = get_post_publication_readiness(post)
+        item = readiness[0]
+
+        self.assertEqual(item["status"], "blocked")
+        self.assertIn("publisher real ainda não está ativo", " ".join(item["messages"]))
 
 
 class PublicationPayloadPreviewTest(TestCase):
@@ -850,6 +1017,22 @@ class PublicationPayloadPreviewTest(TestCase):
         self.assertEqual(preview["payload"]["params"]["url"], "https://example.com/gol_frente.jpg")
         self.assertTrue(preview["payload"]["params"]["published"])
 
+    def test_google_business_single_image_preview_uses_local_posts_endpoint_and_body(self):
+        publication = self.create_publication(
+            "google_business",
+            "single_image",
+            extra_account_kwargs={
+                "external_account_id": "accounts/123/locations/456",
+            },
+        )
+
+        preview = build_publication_payload_preview(publication)
+
+        self.assertEqual(preview["payload"]["endpoint"], "/v4/accounts/123/locations/456/localPosts")
+        self.assertEqual(preview["payload"]["body"]["languageCode"], "pt-BR")
+        self.assertEqual(preview["payload"]["body"]["media"][0]["sourceUrl"], "https://example.com/gol_frente.jpg")
+        self.assertNotIn("access_token", json.dumps(preview))
+
     def test_youtube_image_preview_warns_about_incompatibility(self):
         publication = self.create_publication("youtube", "single_image")
 
@@ -857,3 +1040,299 @@ class PublicationPayloadPreviewTest(TestCase):
 
         self.assertIn("YouTube aceita apenas video neste fluxo.", preview["warnings"])
         self.assertIn("snippet", preview["payload"])
+
+
+class FacebookRealPublisherTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_facebook_account(self, **kwargs):
+        defaults = {
+            "platform": "facebook",
+            "account_name": "Facebook Rodoviária",
+            "status": "connected",
+            "external_account_id": "PAGE123",
+            "access_token": "page-token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_approved_post(self, post_type="single_image"):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle)
+        post = run_post_pipeline(vehicle, platforms=["facebook"], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        return post
+
+    @patch("requests.Session.post")
+    def test_facebook_single_image_success_marks_publication_as_published(self, mocked_post):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_facebook_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 200
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "id": "fb-post-123",
+            "permalink_url": "https://facebook.com/fb-post-123",
+        }
+        mocked_post.return_value = response_mock
+
+        result = publish_to_real_platform(publication)
+
+        self.assertEqual(result.status, "published")
+        self.assertEqual(result.external_post_id, "fb-post-123")
+        self.assertEqual(result.external_url, "https://facebook.com/fb-post-123")
+        self.assertEqual(result.error_message, "")
+        self.assertEqual(mocked_post.call_count, 1)
+
+    @patch("requests.Session.post")
+    def test_facebook_single_image_api_error_marks_failed(self, mocked_post):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_facebook_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 400
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "error": {
+                "message": "Invalid OAuth access token.",
+                "code": 190,
+            }
+        }
+        mocked_post.return_value = response_mock
+
+        with self.assertRaises(RuntimeError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("Invalid OAuth access token", publication.error_message)
+
+    def test_facebook_single_image_without_page_id_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_facebook_account(external_account_id="", page_id="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("Page ID", publication.error_message)
+
+    def test_facebook_single_image_without_token_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_facebook_account(access_token="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("access token", publication.error_message)
+
+    def test_facebook_carousel_remains_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, public_url="https://example.com/gol_frente.jpg")
+        self.create_image_media(vehicle, public_url="https://example.com/gol_lateral.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["facebook"], post_type="carousel")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_facebook_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("single_image", publication.error_message)
+
+
+class GoogleBusinessRealPublisherTest(TestCase):
+    def create_vehicle(self):
+        return Vehicle.objects.create(raw_input=GOL_RAW_INPUT)
+
+    def create_image_media(self, vehicle, public_url="https://example.com/gol_frente.jpg"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="image",
+            file=SimpleUploadedFile(
+                name="gol_frente.jpg",
+                content=b"fake image content",
+                content_type="image/jpeg",
+            ),
+            public_url=public_url,
+        )
+
+    def create_video_media(self, vehicle, public_url="https://example.com/gol_video.mp4"):
+        return MediaAsset.objects.create(
+            vehicle=vehicle,
+            media_type="video",
+            file=SimpleUploadedFile(
+                name="gol_video.mp4",
+                content=b"fake video content",
+                content_type="video/mp4",
+            ),
+            public_url=public_url,
+        )
+
+    def create_google_business_account(self, **kwargs):
+        defaults = {
+            "platform": "google_business",
+            "account_name": "Google Business Rodoviária",
+            "status": "connected",
+            "external_account_id": "accounts/123/locations/456",
+            "access_token": "google-token",
+        }
+        defaults.update(kwargs)
+        return SocialAccount.objects.create(**defaults)
+
+    def create_approved_post(self, post_type="single_image", with_two_images=False):
+        vehicle = self.create_vehicle()
+        self.create_image_media(vehicle, public_url="https://example.com/gol_frente.jpg")
+        if with_two_images:
+            self.create_image_media(vehicle, public_url="https://example.com/gol_lateral.jpg")
+
+        post = run_post_pipeline(vehicle, platforms=["google_business"], post_type=post_type)
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        return post
+
+    @patch("requests.Session.post")
+    def test_google_business_single_image_success_marks_publication_as_published(self, mocked_post):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_google_business_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 200
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "name": "accounts/123/locations/456/localPosts/abc123",
+        }
+        mocked_post.return_value = response_mock
+
+        result = publish_to_real_platform(publication)
+
+        self.assertEqual(result.status, "published")
+        self.assertEqual(result.external_post_id, "accounts/123/locations/456/localPosts/abc123")
+        self.assertEqual(result.external_url, "")
+        self.assertEqual(result.error_message, "")
+        self.assertEqual(mocked_post.call_count, 1)
+        self.assertEqual(
+            mocked_post.call_args.kwargs["json"]["media"][0]["sourceUrl"],
+            "https://example.com/gol_frente.jpg",
+        )
+        self.assertEqual(
+            mocked_post.call_args.kwargs["headers"]["Authorization"],
+            "Bearer google-token",
+        )
+
+    @patch("requests.Session.post")
+    def test_google_business_single_image_api_error_marks_failed(self, mocked_post):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_google_business_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 400
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "error": {
+                "message": "Permission denied.",
+                "code": 403,
+            }
+        }
+        mocked_post.return_value = response_mock
+
+        with self.assertRaises(RuntimeError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("Permission denied", publication.error_message)
+
+    def test_google_business_single_image_without_location_name_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_google_business_account(external_account_id="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("location resource name", publication.error_message)
+
+    def test_google_business_single_image_without_token_fails_with_useful_message(self):
+        post = self.create_approved_post(post_type="single_image")
+        self.create_google_business_account(access_token="")
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn("access token", publication.error_message)
+
+    def test_google_business_video_is_blocked(self):
+        vehicle = self.create_vehicle()
+        self.create_video_media(vehicle)
+
+        post = run_post_pipeline(vehicle, platforms=["google_business"], post_type="video")
+        post.review.status = "approved"
+        post.review.save(update_fields=["status"])
+        self.create_google_business_account()
+        publication = create_publication_targets(post)[0]
+
+        with self.assertRaises(ValueError):
+            publish_to_real_platform(publication)
+
+        publication.refresh_from_db()
+        self.assertEqual(publication.status, "failed")
+        self.assertIn(
+            "Google Business real publishing does not support video in this version.",
+            publication.error_message,
+        )
+
+    @patch("requests.Session.post")
+    def test_google_business_carousel_uses_first_image_only(self, mocked_post):
+        post = self.create_approved_post(post_type="carousel", with_two_images=True)
+        self.create_google_business_account()
+        publication = create_publication_targets(post)[0]
+
+        response_mock = type("Response", (), {})()
+        response_mock.status_code = 200
+        response_mock.text = ""
+        response_mock.json = lambda: {
+            "name": "accounts/123/locations/456/localPosts/abc124",
+        }
+        mocked_post.return_value = response_mock
+
+        result = publish_to_real_platform(publication)
+
+        self.assertEqual(result.status, "published")
+        self.assertEqual(
+            mocked_post.call_args.kwargs["json"]["media"][0]["sourceUrl"],
+            "https://example.com/gol_frente.jpg",
+        )

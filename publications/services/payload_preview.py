@@ -17,6 +17,8 @@ def build_publication_payload_preview(publication_target) -> dict:
         platform=platform,
         post_type=post_type,
         social_account=social_account,
+        platform_post=platform_post,
+        social_post=social_post,
         media=media,
         text=text,
     )
@@ -69,6 +71,8 @@ def _build_platform_payload_preview(
     platform,
     post_type,
     social_account,
+    platform_post,
+    social_post,
     media,
     text,
 ):
@@ -118,6 +122,8 @@ def _build_platform_payload_preview(
         payload, platform_warnings = _build_google_business_payload_preview(
             post_type=post_type,
             social_account=social_account,
+            platform_post=platform_post,
+            social_post=social_post,
             media=media,
             text=text,
         )
@@ -245,22 +251,30 @@ def _build_facebook_payload_preview(post_type, social_account, media, text):
     return payload, warnings
 
 
-def _build_google_business_payload_preview(post_type, social_account, media, text):
+def _build_google_business_payload_preview(post_type, social_account, platform_post, social_post, media, text):
     warnings = []
+    location_resource_name = ""
+    if social_account is not None:
+        location_resource_name = (social_account.external_account_id or "").strip()
+    endpoint_location = location_resource_name or "{location_resource_name}"
+
     summary = build_text_with_hashtags(
-        text["description"] or text["caption"],
+        platform_post.caption or platform_post.description or social_post.base_caption or "",
         text["hashtags"],
     )
 
     payload = {
-        "languageCode": "pt-BR",
-        "summary": summary,
-        "topicType": "STANDARD",
-        "media": [],
+        "endpoint": f"/v4/{endpoint_location}/localPosts",
+        "body": {
+            "languageCode": "pt-BR",
+            "summary": summary,
+            "topicType": "STANDARD",
+            "media": [],
+        },
     }
 
     if media:
-        payload["media"] = [
+        payload["body"]["media"] = [
             {
                 "mediaFormat": "PHOTO",
                 "sourceUrl": media[0].get("public_url", ""),
@@ -268,9 +282,9 @@ def _build_google_business_payload_preview(post_type, social_account, media, tex
         ]
 
     if post_type == "video":
-        warnings.append("Google Business não publica video neste MVP.")
+        warnings.append("Google Business real publishing does not support video in this version.")
     elif post_type == "carousel":
-        warnings.append("Google Business pode usar apenas a imagem principal neste MVP.")
+        warnings.append("Google Business will publish using the first image only.")
 
     if not media:
         warnings.append("Google Business precisa de pelo menos uma mídia para montar o preview.")

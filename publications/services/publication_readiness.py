@@ -1,5 +1,6 @@
 from publications.models import PublicationTarget
 from social_accounts.models import SocialAccountStatus
+from publications.services.real_publishability import get_real_publishability
 
 
 def get_post_publication_readiness(social_post) -> list[dict]:
@@ -84,6 +85,13 @@ def _build_publication_target_readiness(publication_target, review_approved):
     )
     messages.extend(format_messages)
     status = _merge_status(status, format_status)
+
+    publisher_status, publisher_messages = get_real_publishability(
+        platform=platform,
+        post_type=social_post.post_type,
+    )
+    messages.extend(publisher_messages)
+    status = _merge_status(status, publisher_status)
 
     if platform == "instagram" and status == "ready":
         status = "ready"
@@ -170,10 +178,12 @@ def _validate_platform_format(platform, post_type):
             return "ready", []
         if post_type == "carousel":
             return "warning", [
-                "Google Business pode usar apenas a imagem principal nesta versão.",
+                "Google Business will publish using the first image only.",
             ]
         if post_type == "video":
-            return "blocked", ["Google Business nesta versão não publica vídeo."]
+            return "blocked", [
+                "Google Business real publishing does not support video in this version.",
+            ]
         return "blocked", ["Tipo de post não suportado para Google Business nesta versão."]
 
     if platform == "youtube":
