@@ -60,3 +60,14 @@ class SystemCheckViewTest(TestCase):
         self.assertContains(response, "Google Business - incomplete")
         self.assertContains(response, "YouTube - incomplete")
         self.assertContains(response, "TikTok - incomplete")
+
+    def test_home_exposes_operational_links(self):
+        response = self.client.get(reverse("core:home"))
+
+        self.assertEqual(response.status_code, 200)
+        self.assertContains(response, "Veículos")
+        self.assertContains(response, "Criar veículo")
+        self.assertContains(response, "Criar publicação")
+        self.assertContains(response, "Publicações")
+        self.assertContains(response, "Integrações")
+        self.assertContains(response, "System Check")
